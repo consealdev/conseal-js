@@ -25,3 +25,6 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# The keychain demo's local state
+examples/keychain-poc/*-state.json
