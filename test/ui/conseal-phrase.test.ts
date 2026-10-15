@@ -1,5 +1,6 @@
 import { generateMnemonic } from '../../src/core/index.js';
-import { expect, fixture, html, oneEvent } from '@open-wc/testing';
+import { describe, expect, it } from 'vitest';
+import { fixture, html, oneEvent } from '../support/dom.js';
 import { button, findAll, press, textOf, tick } from '../support/shadow.js';
 import type { ConsealPhrase } from '../../src/ui/conseal-phrase.js';
 import '../../src/ui/conseal-phrase.js';

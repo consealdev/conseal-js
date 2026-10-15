@@ -7,6 +7,7 @@ export default defineConfig({
         testTimeout: 60_000,
         projects: [
             {
+                extends: true,
                 test: {
                     name: 'node',
                     environment: 'node',
@@ -14,11 +15,12 @@ export default defineConfig({
                     setupFiles: ['./test/support/setup.ts'],
                 },
             },
+            // Core and the components in each browser engine: WebCrypto differs between them.
             {
-                // Core in each browser engine: WebCrypto differs between them.
+                extends: true,
                 test: {
                     name: 'browser',
-                    include: ['test/core/**/*.test.ts'],
+                    include: ['test/core/**/*.test.ts', 'test/ui/**/*.test.ts'],
                     browser: {
                         enabled: true,
                         provider: playwright(),

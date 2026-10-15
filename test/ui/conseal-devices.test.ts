@@ -1,4 +1,5 @@
-import { expect, fixture, html, oneEvent, waitUntil } from '@open-wc/testing';
+import { describe, expect, it } from 'vitest';
+import { fixture, html, oneEvent, waitUntil } from '../support/dom.js';
 import { CircleClient } from '../../src/sync/circle-client.js';
 import { MemoryCircleStore } from '../../src/sync/circle-store.js';
 import { SyncTransportError } from '../../src/sync/errors.js';
