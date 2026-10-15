@@ -191,7 +191,7 @@ import { saveCryptoKey, loadCryptoKey, deleteCryptoKey } from '@consealdev/conse
 
 ## Security
 
-The [threat model](https://github.com/consealdev/conseal/blob/main/threat-model.md) says what conseal protects, what it relies on, and what a dishonest server can still do.
+The [threat model](https://github.com/consealdev/conseal/blob/main/threat-model.md) says what conseal protects, what it relies on, and what a dishonest server can still do. Report a vulnerability privately, as the [security policy](https://github.com/consealdev/.github/blob/main/SECURITY.md) says, never in a public issue.
 
 ## Development
 
