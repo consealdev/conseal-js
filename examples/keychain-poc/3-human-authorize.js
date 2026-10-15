@@ -3,7 +3,7 @@
  *
  * - Loads private state from human-state.json
  * - Fetches the join request from the relay
- * - Derives and prints the verification code — confirm it matches step 2 output
+ * - Derives the verification code from its own aekCommitment and prints it — confirm it matches step 2 output
  * - Calls authorizeJoin() to seal the AEK for the service's ephemeral public key
  * - Posts the sealed AEK to the relay (only the service's ephemeral private key can open it)
  *
@@ -59,8 +59,9 @@ async function main()
     const { serverReceivedAt, ...joinRequest } = await get('join-request');
     console.log(`[human] join request from: ${joinRequest.deviceMeta?.name} (${joinRequest.deviceMeta?.platform})`);
 
-    // Derive verification code from the service's ephemeral public key
-    const code = await deriveVerificationCode(joinRequest.ephemeralPublicKey);
+    // Derive the verification code from the service's ephemeral public key and the
+    // human's own commitment, never one the relay supplies
+    const code = await deriveVerificationCode(joinRequest.ephemeralPublicKey, aekCommitment);
     console.log(`[human] verification code: ${code}`);
     console.log('  ^^^ This must match what the service printed in step 2.');
     console.log('  In a real UI the human would confirm this before proceeding.\n');
@@ -76,13 +77,12 @@ async function main()
     );
     console.log('[human] AEK sealed for service (only service ephemeral key can open this)');
 
-    // Post sealed AEK + commitment to relay
+    // Post sealed AEK to relay
     // The relay stores this blob but cannot open it
     await post('sealed-aek', {
         ciphertext: toBase64(new Uint8Array(sealedAEK.ciphertext)),
         iv: toBase64(sealedAEK.iv),
         ephemeralPublicKey: sealedAEK.ephemeralPublicKey,
-        aekCommitment: toBase64(new Uint8Array(aekCommitment)),
     });
     console.log('[human] sealed AEK posted to relay\n');
     console.log('Next: run 4-service-finalize.js');

@@ -118,10 +118,10 @@ Four functions cover the full device-registration ceremony:
 | Function | Description |
 |---|---|
 | `initCircle(mnemonic, passphrase, secretKey)` | Founding device derives the shared AEK from the mnemonic, wraps it, and returns `wrappedAEK`, `aekCommitment`, and `deviceId`. |
-| `createJoinRequest(deviceMeta?)` | New device generates an ephemeral ECDH key pair. Returns the join request payload, the ephemeral private key (memory-only), and a `verificationCode` to display to the user. |
+| `createJoinRequest(aekCommitment, deviceMeta?)` | New device generates an ephemeral ECDH key pair, after taking the circle's commitment from the backend. Returns the join request payload, the ephemeral private key (memory-only), and a `verificationCode` to display to the user. |
 | `authorizeJoin(joinRequest, wrappedAEK, passphrase, secretKey, serverReceivedAt)` | Trusted device unwraps its AEK and seals it for the new device via ECDH. `serverReceivedAt` is when the server received the request, in Unix ms; requests older than 5 minutes are rejected. |
-| `finalizeJoin(sealedAEK, ephemeralPrivateKey, passphrase, secretKey, aekCommitment)` | New device unseals the AEK, verifies the commitment, and re-wraps it under its own credentials. Throws on commitment mismatch. |
-| `deriveVerificationCode(ephemeralPublicKey)` | Derives an 80-bit code from a public key, as 16 base32 characters: `7KQ2-M9XD-4RTF-B8NW`. Both devices must show matching codes before approval to prevent MITM. |
+| `finalizeJoin(sealedAEK, ephemeralPrivateKey, passphrase, secretKey, aekCommitment)` | New device unseals the AEK, verifies it against the commitment the request was created with, and re-wraps it under its own credentials. Throws on commitment mismatch. |
+| `deriveVerificationCode(ephemeralPublicKey, aekCommitment)` | Derives an 80-bit code from the commitment and a public key, as 16 base32 characters: `7KQ2-M9XD-4RTF-B8NW`. The trusted device passes its own commitment, never one the server supplies. Both devices must show matching codes before approval: a key or a commitment substituted on the way changes one of them. |
 
 ### Shared encrypted spaces (Channel)
 
