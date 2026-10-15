@@ -1,0 +1,342 @@
+import {
+    authorizeJoin,
+    createJoinRequest,
+    deriveVerificationCode,
+    digest,
+    generateMnemonic,
+    generateSecretKey,
+    initCircle,
+    recoverWithMnemonic,
+    toBase64,
+    unwrapKey,
+    wrapKey,
+    type SealedAEK,
+    type WrappedAEK,
+} from '../core/index.js';
+import { IndexedDbCircleStore, type CircleStore } from './circle-store.js';
+import type { CircleTransport, DeviceInfo, DeviceMeta, PendingJoinRequest } from './circle-transport.js';
+import { decodeWrappedAek, encodeSealed, encodeWrappedAek, type EncodedWrappedAek } from './encoding.js';
+import {
+    CommitmentMismatchError,
+    DeviceNotRegisteredError,
+    JoinExpiredError,
+    LockedError,
+    WrongPassphraseError,
+} from './errors.js';
+import { JoinSession } from './join-session.js';
+import { sealPassphraseCheck } from './passphrase-check.js';
+
+/** How long a join request can wait for approval, by the server's clock. conseal's `authorizeJoin` enforces the same. */
+const JOIN_TTL_MS = 5 * 60 * 1000;
+
+export interface CircleClientOptions
+{
+    transport: CircleTransport;
+    /** Where this device keeps its keys. Defaults to IndexedDB, which needs a browser; pass a store in Node. */
+    store?: CircleStore | undefined;
+}
+
+/**
+ * Where this device stands with the circle:
+ *
+ * - `unlocked`: it holds the AEK
+ * - `locked`: it holds its keys and needs the passphrase
+ * - `unregistered`: it holds no keys, so it has to join or recover
+ */
+export type DeviceStatus = 'unlocked' | 'locked' | 'unregistered';
+
+export interface SetupResult
+{
+    /** The 24-word recovery phrase. Show it to the user once; never store or send it. */
+    mnemonic: string;
+    deviceId: string;
+    aekCommitment: string;
+}
+
+export interface RecoverOptions
+{
+    deviceMeta?: DeviceMeta | undefined;
+    /** Revoke every other device once this one is recovered, for when the others may be lost or compromised. */
+    revokeOtherDevices?: boolean | undefined;
+}
+
+/** A join request waiting for this device's approval, with the code the user must compare. */
+export interface PendingJoin extends PendingJoinRequest
+{
+    verificationCode: string;
+}
+
+export interface CircleDevice extends DeviceInfo
+{
+    /** Whether this is the device the client runs on. */
+    current: boolean;
+}
+
+/**
+ * The circle ceremony without a UI: creating the circle, unlocking, joining a device, approving one, recovering
+ * from the mnemonic, and managing devices. It holds the state machine and every cryptographic step; the app
+ * supplies HTTP through a `CircleTransport` and renders what the client reports.
+ */
+export class CircleClient
+{
+    private readonly _transport: CircleTransport;
+    private readonly _store: CircleStore;
+
+    constructor(options: CircleClientOptions)
+    {
+        this._transport = options.transport;
+        this._store = options.store ?? new IndexedDbCircleStore();
+    }
+
+    /** This device's id, once it has created, joined or recovered the circle. */
+    public deviceId(): Promise<string | undefined>
+    {
+        return this._store.get<string>('deviceId');
+    }
+
+    /** Where this device stands, from what it holds locally. `isRegistered` asks the server. */
+    public async status(): Promise<DeviceStatus>
+    {
+        if (await this._store.get<CryptoKey>('aek')) return 'unlocked';
+        const deviceId = await this._store.get<string>('deviceId');
+        const secretKey = await this._store.get<Uint8Array>('secretKey');
+        return deviceId && secretKey ? 'locked' : 'unregistered';
+    }
+
+    /** Whether the server still knows this device: false when it never registered or was revoked. */
+    public async isRegistered(): Promise<boolean>
+    {
+        const deviceId = await this.deviceId();
+        return deviceId !== undefined && await this._transport.getWrappedAek(deviceId) !== undefined;
+    }
+
+    /**
+     * Creates the circle with this as its first device, and unlocks it. The returned mnemonic is the circle's
+     * root of trust: show it to the user once, and never store it.
+     */
+    public async setup(passphrase: string, deviceMeta: DeviceMeta = {}): Promise<SetupResult>
+    {
+        const mnemonic = generateMnemonic();
+        const secretKey = generateSecretKey();
+        const { wrappedAEK, aekCommitment, deviceId } = await initCircle(mnemonic, passphrase, secretKey);
+        const commitment = toBase64(aekCommitment);
+
+        await this._transport.createCircle({
+            deviceId,
+            aekCommitment: commitment,
+            wrappedAek: encodeWrappedAek(wrappedAEK),
+            deviceMeta,
+        });
+        await this._keep(deviceId, secretKey, wrappedAEK, passphrase);
+        return { mnemonic, deviceId, aekCommitment: commitment };
+    }
+
+    /**
+     * Unlocks this device with its passphrase. Throws `WrongPassphraseError` when it doesn't open the key, and
+     * `DeviceNotRegisteredError` when the device has to join or recover instead.
+     */
+    public async unlock(passphrase: string): Promise<void>
+    {
+        const { secretKey, wrapped } = await this._ownKeys();
+        await this._store.put('aek', await unwrapAek(passphrase, wrapped, secretKey));
+    }
+
+    /** Forgets the unlocked AEK. The device keeps its keys and unlocks again with its passphrase. */
+    public lock(): Promise<void>
+    {
+        return this._store.delete('aek');
+    }
+
+    /** The AEK, for sealing the user's data. Throws `LockedError` until the device is unlocked. */
+    public async aek(): Promise<CryptoKey>
+    {
+        const aek = await this._store.get<CryptoKey>('aek');
+        if (!aek) throw new LockedError('The circle is locked on this device. Unlock it first.');
+        return aek;
+    }
+
+    /**
+     * Recovers the circle on this device from the mnemonic, under a new passphrase. The recovered key is checked
+     * against the account's commitment before anything is registered, so a mistyped phrase that still passes the
+     * BIP-39 checksum is refused with `CommitmentMismatchError` rather than replacing the circle's key.
+     */
+    public async recover(mnemonic: string, newPassphrase: string, options: RecoverOptions = {}): Promise<{ deviceId: string; aekCommitment: string }>
+    {
+        const aek = await recoverWithMnemonic(mnemonic, true);
+        const commitment = toBase64(await digest(await crypto.subtle.exportKey('raw', aek)));
+        const published = await this._transport.getCommitment();
+        if (published === undefined)
+        {
+            throw new CommitmentMismatchError('The account has no circle to recover.');
+        }
+        if (commitment !== published)
+        {
+            throw new CommitmentMismatchError('This recovery phrase belongs to a different circle.');
+        }
+
+        // Keep this device's id while the server still knows it, so a recovery doesn't leave a stale entry.
+        const existing = await this.deviceId();
+        const deviceId = existing !== undefined && await this._transport.getWrappedAek(existing) !== undefined
+            ? existing
+            : crypto.randomUUID();
+        const secretKey = generateSecretKey();
+        const wrapped = await wrapKey(newPassphrase, aek, secretKey);
+
+        await this._transport.saveWrappedAek(deviceId, encodeWrappedAek(wrapped), options.deviceMeta ?? {});
+        await this._keep(deviceId, secretKey, wrapped, newPassphrase);
+
+        if (options.revokeOtherDevices)
+        {
+            for (const device of await this._transport.listDevices())
+            {
+                if (device.deviceId !== deviceId) await this._transport.revokeDevice(device.deviceId);
+            }
+        }
+        return { deviceId, aekCommitment: commitment };
+    }
+
+    /**
+     * Starts joining an existing circle from this device: posts a join request and returns the session that
+     * carries it through. Show its `verificationCode` while the user approves on a trusted device.
+     */
+    public async startJoin(deviceMeta: DeviceMeta = {}): Promise<JoinSession>
+    {
+        const { request, ephemeralPrivateKey, verificationCode } = await createJoinRequest(deviceMeta);
+        const { challengeId, aekCommitment } = await this._transport.createJoin(request);
+
+        return new JoinSession({
+            transport: this._transport,
+            challengeId,
+            deviceId: request.deviceId,
+            verificationCode,
+            aekCommitment,
+            ephemeralPrivateKey,
+            complete: async (wrapped, secretKey, passphrase) => {
+                await this._transport.saveWrappedAek(request.deviceId, encodeWrappedAek(wrapped), deviceMeta, challengeId);
+                await this._keep(request.deviceId, secretKey, wrapped, passphrase);
+            },
+        });
+    }
+
+    /** The join requests waiting for approval, each with the code to compare with the joining device. */
+    public async pendingJoins(): Promise<PendingJoin[]>
+    {
+        const pending = await this._transport.listPendingJoins();
+        return Promise.all(pending.map(async join => ({
+            ...join,
+            verificationCode: await deriveVerificationCode(join.request.ephemeralPublicKey),
+        })));
+    }
+
+    /**
+     * Approves a join request with this device's passphrase. It seals the AEK, and a check of the passphrase that
+     * vouches for that sealed AEK, for the joining device's ephemeral key only.
+     *
+     * Call it only after the user has confirmed that `join.verificationCode` matches the code on the joining
+     * device, and pass `codeConfirmed: true` to say so. That comparison is the ceremony's defence against a
+     * substituted key: approving without it hands the AEK to whoever posted the request.
+     */
+    public async approveJoin(join: PendingJoin, passphrase: string, codeConfirmed: true): Promise<void>
+    {
+        if (codeConfirmed !== true)
+        {
+            throw new TypeError('approveJoin needs the user to have confirmed the verification code.');
+        }
+        if (Date.now() - join.receivedAt > JOIN_TTL_MS)
+        {
+            throw new JoinExpiredError('This join request has expired. Ask the other device to try again.');
+        }
+
+        const { secretKey, wrapped } = await this._ownKeys();
+        let sealedAek: SealedAEK;
+        try
+        {
+            sealedAek = await authorizeJoin(join.request, wrapped, passphrase, secretKey, join.receivedAt);
+        }
+        catch (error)
+        {
+            throw asWrongPassphrase(error);
+        }
+        const encoded = encodeSealed(sealedAek);
+        const passphraseCheck = await sealPassphraseCheck(passphrase, encoded, join.request.ephemeralPublicKey);
+        await this._transport.authorizeJoin(join.challengeId, encoded, passphraseCheck);
+    }
+
+    public denyJoin(challengeId: string): Promise<void>
+    {
+        return this._transport.denyJoin(challengeId);
+    }
+
+    /** The circle's devices, this one marked `current`. */
+    public async devices(): Promise<CircleDevice[]>
+    {
+        const current = await this.deviceId();
+        const devices = await this._transport.listDevices();
+        return devices.map(device => ({ ...device, current: device.deviceId === current }));
+    }
+
+    /**
+     * Revokes a device: it stops syncing. It keeps the AEK it already holds, so revoking isn't the same as taking
+     * the key back.
+     */
+    public revokeDevice(deviceId: string): Promise<void>
+    {
+        return this._transport.revokeDevice(deviceId);
+    }
+
+    /** This device's Secret Key and wrapped AEK, fetching the wrapped AEK from the server when it isn't local. */
+    private async _ownKeys(): Promise<{ secretKey: Uint8Array; wrapped: WrappedAEK }>
+    {
+        const deviceId = await this._store.get<string>('deviceId');
+        const secretKey = await this._store.get<Uint8Array>('secretKey');
+        if (!deviceId || !secretKey)
+        {
+            throw new DeviceNotRegisteredError('This device holds no keys for the circle. Join or recover.');
+        }
+
+        let encoded = await this._store.get<EncodedWrappedAek>('wrappedAek');
+        if (!encoded)
+        {
+            encoded = await this._transport.getWrappedAek(deviceId);
+            if (!encoded)
+            {
+                throw new DeviceNotRegisteredError('The server no longer knows this device. Join or recover.');
+            }
+            await this._store.put('wrappedAek', encoded);
+        }
+        return { secretKey, wrapped: decodeWrappedAek(encoded) };
+    }
+
+    /** Keeps a device's keys and unlocks it. */
+    private async _keep(deviceId: string, secretKey: Uint8Array, wrapped: WrappedAEK, passphrase: string): Promise<void>
+    {
+        const aek = await unwrapAek(passphrase, wrapped, secretKey);
+        await this._store.put('deviceId', deviceId);
+        await this._store.put('secretKey', secretKey);
+        await this._store.put('wrappedAek', encodeWrappedAek(wrapped));
+        await this._store.put('aek', aek);
+    }
+}
+
+/** Unwraps the AEK as non-extractable: a script that can use it still can't read its bytes. */
+async function unwrapAek(passphrase: string, wrapped: WrappedAEK, secretKey: Uint8Array): Promise<CryptoKey>
+{
+    try
+    {
+        return await unwrapKey(passphrase, wrapped.wrappedKey, wrapped.salt, secretKey);
+    }
+    catch (error)
+    {
+        throw asWrongPassphrase(error);
+    }
+}
+
+// SubtleCrypto reports a failed AES-GCM unwrap, which is what a wrong passphrase causes, as an OperationError.
+function asWrongPassphrase(error: unknown): unknown
+{
+    if (error instanceof Error && error.name === 'OperationError')
+    {
+        return new WrongPassphraseError('The passphrase doesn\'t open this device\'s key.');
+    }
+    return error;
+}
