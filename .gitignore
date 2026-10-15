@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Test output
+.vitest-attachments/
+test/__screenshots__/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors
+.vscode/
+.idea/
+
+# Claude Code — per-machine permission state
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db

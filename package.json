@@ -1,0 +1,72 @@
+{
+    "name": "@consealdev/conseal",
+    "version": "0.0.0",
+    "license": "AGPL-3.0-or-later OR Commercial",
+    "homepage": "https://conseal.dev",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/consealdev/conseal-js"
+    },
+    "description": "End-to-end encrypted sync and sharing for web apps: zero-knowledge cryptography on SubtleCrypto, the circle and channel ceremonies, the sync engine and the ceremony screens.",
+    "type": "module",
+    "main": "./dist/core/index.js",
+    "types": "./dist/core/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/core/index.d.ts",
+            "import": "./dist/core/index.js"
+        },
+        "./sync": {
+            "types": "./dist/sync/index.d.ts",
+            "import": "./dist/sync/index.js"
+        },
+        "./ui": {
+            "types": "./dist/ui/index.d.ts",
+            "import": "./dist/ui/index.js"
+        }
+    },
+    "sideEffects": [
+        "./dist/ui/**"
+    ],
+    "files": [
+        "dist"
+    ],
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "dev": "tsc -p tsconfig.build.json --watch",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint .",
+        "test": "vitest run --project node",
+        "test:watch": "vitest --project node",
+        "test:browser": "vitest run --project browser && wtr"
+    },
+    "dependencies": {
+        "@scure/bip39": "^2.0.0"
+    },
+    "peerDependencies": {
+        "lit": "^3.0.0"
+    },
+    "peerDependenciesMeta": {
+        "lit": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "@open-wc/testing": "^5.0.0",
+        "@types/mocha": "^10.0.10",
+        "@types/node": "^24.19.2",
+        "@vitest/browser": "^4.1.11",
+        "@vitest/browser-playwright": "^4.1.11",
+        "@web/dev-server-esbuild": "^2.0.0",
+        "@web/test-runner": "^1.0.0",
+        "@web/test-runner-playwright": "^1.0.0",
+        "fake-indexeddb": "^6.2.5",
+        "lit": "^3.3.3",
+        "playwright": "^1.64.1",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.11"
+    }
+}
