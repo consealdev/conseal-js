@@ -3,6 +3,7 @@ import {
     createJoinRequest,
     deriveVerificationCode,
     digest,
+    fromBase64,
     generateMnemonic,
     generateSecretKey,
     initCircle,
@@ -97,7 +98,8 @@ export class CircleClient
     /** Where this device stands, from what it holds locally. `isRegistered` asks the server. */
     public async status(): Promise<DeviceStatus>
     {
-        if (await this._store.get<CryptoKey>('aek')) return 'unlocked';
+        // A device unlocked before it kept its commitment reads as locked, so its next unlock works the commitment out.
+        if (await this._store.get<CryptoKey>('aek') && await this._store.get<string>('aekCommitment')) return 'unlocked';
         const deviceId = await this._store.get<string>('deviceId');
         const secretKey = await this._store.get<Uint8Array>('secretKey');
         return deviceId && secretKey ? 'locked' : 'unregistered';
@@ -127,7 +129,7 @@ export class CircleClient
             wrappedAek: encodeWrappedAek(wrappedAEK),
             deviceMeta,
         });
-        await this._keep(deviceId, secretKey, wrappedAEK, passphrase);
+        await this._keep(deviceId, secretKey, wrappedAEK, passphrase, commitment);
         return { mnemonic, deviceId, aekCommitment: commitment };
     }
 
@@ -138,6 +140,12 @@ export class CircleClient
     public async unlock(passphrase: string): Promise<void>
     {
         const { secretKey, wrapped } = await this._ownKeys();
+        if (await this._store.get<string>('aekCommitment') === undefined)
+        {
+            // A device from before it kept its commitment works it out once, from the AEK it holds.
+            const aek = await unwrapAek(passphrase, wrapped, secretKey, true);
+            await this._store.put('aekCommitment', toBase64(await digest(await crypto.subtle.exportKey('raw', aek))));
+        }
         await this._store.put('aek', await unwrapAek(passphrase, wrapped, secretKey));
     }
 
@@ -183,7 +191,7 @@ export class CircleClient
         const wrapped = await wrapKey(newPassphrase, aek, secretKey);
 
         await this._transport.saveWrappedAek(deviceId, encodeWrappedAek(wrapped), options.deviceMeta ?? {});
-        await this._keep(deviceId, secretKey, wrapped, newPassphrase);
+        await this._keep(deviceId, secretKey, wrapped, newPassphrase, commitment);
 
         if (options.revokeOtherDevices)
         {
@@ -198,11 +206,19 @@ export class CircleClient
     /**
      * Starts joining an existing circle from this device: posts a join request and returns the session that
      * carries it through. Show its `verificationCode` while the user approves on a trusted device.
+     *
+     * The code covers the account's commitment, which the device reads before its key pair exists, so whoever
+     * supplies it can't choose it after seeing the key. The session checks the AEK against that same commitment.
      */
     public async startJoin(deviceMeta: DeviceMeta = {}): Promise<JoinSession>
     {
-        const { request, ephemeralPrivateKey, verificationCode } = await createJoinRequest(deviceMeta);
-        const { challengeId, aekCommitment } = await this._transport.createJoin(request);
+        const aekCommitment = await this._transport.getCommitment();
+        if (aekCommitment === undefined)
+        {
+            throw new CommitmentMismatchError('The account has no circle to join.');
+        }
+        const { request, ephemeralPrivateKey, verificationCode } = await createJoinRequest(fromBase64(aekCommitment), deviceMeta);
+        const { challengeId } = await this._transport.createJoin(request);
 
         return new JoinSession({
             transport: this._transport,
@@ -213,18 +229,29 @@ export class CircleClient
             ephemeralPrivateKey,
             complete: async (wrapped, secretKey, passphrase) => {
                 await this._transport.saveWrappedAek(request.deviceId, encodeWrappedAek(wrapped), deviceMeta, challengeId);
-                await this._keep(request.deviceId, secretKey, wrapped, passphrase);
+                await this._keep(request.deviceId, secretKey, wrapped, passphrase, aekCommitment);
             },
         });
     }
 
-    /** The join requests waiting for approval, each with the code to compare with the joining device. */
+    /**
+     * The join requests waiting for approval, each with the code to compare with the joining device. The codes cover
+     * this device's own commitment, never one the server supplies, so a joining device given another key's commitment
+     * shows a code that differs. Throws `LockedError` on a device that hasn't unlocked since it began keeping its
+     * commitment.
+     */
     public async pendingJoins(): Promise<PendingJoin[]>
     {
+        const commitment = await this._store.get<string>('aekCommitment');
+        if (commitment === undefined)
+        {
+            throw new LockedError('Unlock the circle on this device to see its join requests.');
+        }
+        const aekCommitment = fromBase64(commitment);
         const pending = await this._transport.listPendingJoins();
         return Promise.all(pending.map(async join => ({
             ...join,
-            verificationCode: await deriveVerificationCode(join.request.ephemeralPublicKey),
+            verificationCode: await deriveVerificationCode(join.request.ephemeralPublicKey, aekCommitment),
         })));
     }
 
@@ -307,23 +334,33 @@ export class CircleClient
         return { secretKey, wrapped: decodeWrappedAek(encoded) };
     }
 
-    /** Keeps a device's keys and unlocks it. */
-    private async _keep(deviceId: string, secretKey: Uint8Array, wrapped: WrappedAEK, passphrase: string): Promise<void>
+    /** Keeps a device's keys, and the commitment it took the AEK with, and unlocks it. */
+    private async _keep(
+        deviceId: string,
+        secretKey: Uint8Array,
+        wrapped: WrappedAEK,
+        passphrase: string,
+        aekCommitment: string,
+    ): Promise<void>
     {
         const aek = await unwrapAek(passphrase, wrapped, secretKey);
         await this._store.put('deviceId', deviceId);
         await this._store.put('secretKey', secretKey);
         await this._store.put('wrappedAek', encodeWrappedAek(wrapped));
+        await this._store.put('aekCommitment', aekCommitment);
         await this._store.put('aek', aek);
     }
 }
 
-/** Unwraps the AEK as non-extractable: a script that can use it still can't read its bytes. */
-async function unwrapAek(passphrase: string, wrapped: WrappedAEK, secretKey: Uint8Array): Promise<CryptoKey>
+/**
+ * Unwraps the AEK, non-extractable unless asked: a script that can use it still can't read its bytes. Only `unlock`
+ * asks, once, to work out the commitment of a device that didn't keep one.
+ */
+async function unwrapAek(passphrase: string, wrapped: WrappedAEK, secretKey: Uint8Array, extractable = false): Promise<CryptoKey>
 {
     try
     {
-        return await unwrapKey(passphrase, wrapped.wrappedKey, wrapped.salt, secretKey);
+        return await unwrapKey(passphrase, wrapped.wrappedKey, wrapped.salt, secretKey, extractable);
     }
     catch (error)
     {

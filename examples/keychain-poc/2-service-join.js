@@ -1,7 +1,8 @@
 /**
  * Keychain PoC — Step 2: Service creates a join request
  *
- * - Calls createJoinRequest() to generate an ephemeral ECDH key pair
+ * - Fetches the scope's aekCommitment from the relay, before any key pair exists
+ * - Calls createJoinRequest() to generate an ephemeral ECDH key pair; its code covers the commitment
  * - Posts the join request to the relay with a server-stamped arrival time
  * - Prints the verification code — the human must confirm it matches before authorizing
  * - Saves ephemeral private key and service credentials to service-state.json
@@ -11,6 +12,7 @@
 
 import {
     createJoinRequest,
+    fromBase64,
     generateSecretKey,
     toBase64,
 } from '@consealdev/conseal';
@@ -24,6 +26,13 @@ const RELAY = 'http://localhost:4400';
 
 // Service's own credentials for re-wrapping the AEK after finalizeJoin
 const SERVICE_PASSPHRASE = 'service-internal-passphrase';
+
+async function get(key)
+{
+    const res = await fetch(`${RELAY}/fetch/${key}`);
+    if (!res.ok) throw new Error(`relay GET /fetch/${key} failed: ${res.status}`);
+    return res.json();
+}
 
 async function post(key, value)
 {
@@ -41,9 +50,14 @@ async function main()
 
     const serviceSecretKey = generateSecretKey();
 
+    // Take the scope's commitment first: the verification code covers it, and the
+    // relay can't choose it after seeing the service's key
+    const manifest = await get('scope-manifest');
+    const aekCommitment = fromBase64(manifest.aekCommitment);
+
     // createJoinRequest generates an ephemeral ECDH key pair for the ceremony
     const { request: joinRequest, ephemeralPrivateKey, verificationCode } =
-        await createJoinRequest({ name: 'analytics-service', platform: 'node' });
+        await createJoinRequest(aekCommitment, { name: 'analytics-service', platform: 'node' });
 
     console.log(`[service] verification code: ${verificationCode}`);
     console.log('  ^^^ The human must confirm this matches the code in step 3 before proceeding.\n');
@@ -64,6 +78,7 @@ async function main()
         passphrase: SERVICE_PASSPHRASE,
         secretKey: toBase64(serviceSecretKey),
         verificationCode,
+        aekCommitment: manifest.aekCommitment,
         joinRequest,
         ephemeralPrivateKey: ephemeralPrivateKeyJwk,
     };

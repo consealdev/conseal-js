@@ -105,6 +105,11 @@ const [join] = await circle.pendingJoins();
 await circle.approveJoin(join, passphrase, true);
 ```
 
+Both codes cover the account's commitment and the new device's key. The new device reads the commitment before it
+makes its key pair, and the trusted device uses the one it keeps, so a key or a commitment the server swaps changes
+one of the codes. A device that hasn't kept its commitment, because it was set up before devices kept one, reads as
+`locked` until its next `unlock`, which works it out.
+
 ### The transport
 
 `CircleTransport` has one method per circle route: create the circle, read the commitment, store and read a device's

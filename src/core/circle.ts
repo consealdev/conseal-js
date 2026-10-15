@@ -11,9 +11,15 @@
  * Four exported functions cover the full device-registration ceremony:
  *
  *   initCircle()        — founding device derives the shared AEK from the mnemonic
- *   createJoinRequest() — new device generates an ephemeral ECDH key pair
+ *   createJoinRequest() — new device takes the commitment and generates an ephemeral ECDH key pair
  *   authorizeJoin()     — trusted device seals the AEK for the new device
  *   finalizeJoin()      — new device unseals and re-wraps the AEK
+ *
+ * Both devices show a verification code that covers the AEK commitment and the
+ * new device's ephemeral public key (deriveVerificationCode). The new device
+ * takes the commitment from the backend before its key pair exists, and the
+ * trusted device uses its own, so a key or a commitment substituted on the way
+ * changes one of the codes, and comparing them catches it.
  *
  * secretKey (Uint8Array) is required for all four functions — passphrase-only
  * wrapping does not meet the security bar for multi-device sync. Each device
@@ -37,6 +43,8 @@ export const JOIN_TTL_MS = 5 * 60 * 1000;
 
 const CODE_BYTES = 10; // 80 bits, 16 base32 characters
 const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford base32: no I, L, O or U
+const CODE_LABEL = 'conseal-circle-join:v1';
+const COMMITMENT_LENGTH = 32;
 
 // ---------- Types ----------
 
@@ -72,25 +80,41 @@ export interface SealedAEK
 // ---------- Exported helpers ----------
 
 /**
- * Derives a human-readable verification code from an ECDH public key JWK.
+ * Derives a join's human-readable verification code from the circle's AEK
+ * commitment and the new device's ephemeral public key JWK.
  *
- * Exports the key as its uncompressed point bytes (65 bytes for P-256),
- * SHA-256 hashes them, and formats the first 80 bits as 16 Crockford base32
- * characters in groups of four: e.g. "7KQ2-M9XD-4RTF-B8NW".
+ * SHA-256 hashes a label, the 32-byte commitment and the key's uncompressed
+ * point (65 bytes for P-256), and formats the first 80 bits as 16 Crockford
+ * base32 characters in groups of four: e.g. "7KQ2-M9XD-4RTF-B8NW". Every field
+ * has a fixed length, so the input splits only one way.
  *
- * Both the new device (createJoinRequest) and the authorizing device
- * (authorizeJoin) call this with the same JWK and must get the same code.
+ * The new device gets its code from createJoinRequest, which covers the
+ * commitment it took. The authorizing device calls this with the request's
+ * key and its own commitment: the one initCircle returned, or the one its own
+ * join or recovery checked, never one the server supplies with the request.
  * The user confirms the codes match out-of-band before approval proceeds.
  *
- * A server that relays the join can put a key pair of its own in place of the
- * new device's, and needs one whose code matches: about 2^80 tries. That is out
- * of reach within the 5-minute TTL, and so is a table built in advance, which
- * would serve every join since the code covers the key alone. At 32 bits, one
- * GPU finds a match in under a minute.
+ * The codes then match only when both devices hold the same commitment and
+ * key. A server that relays the join can put a key pair of its own in place of
+ * the new device's, or give the new device the commitment of a key of its own,
+ * and either changes one device's code. It needs a match by chance: about 2^80
+ * tries. That is out of reach within the 5-minute TTL, and so is a table built
+ * in advance for an account's commitment. At 32 bits, one GPU finds a match in
+ * under a minute.
  */
-export async function deriveVerificationCode(ephemeralPublicKey: JsonWebKey): Promise<string>
+export async function deriveVerificationCode(
+    ephemeralPublicKey: JsonWebKey,
+    aekCommitment: ArrayBuffer | Uint8Array
+): Promise<string>
 {
-    return formatVerificationCode(await digest(await exportRawPublicKey(ephemeralPublicKey)));
+    requireCommitment('deriveVerificationCode', aekCommitment);
+    const label = new TextEncoder().encode(CODE_LABEL);
+    const point = new Uint8Array(await exportRawPublicKey(ephemeralPublicKey));
+    const input = new Uint8Array(label.byteLength + COMMITMENT_LENGTH + point.byteLength);
+    input.set(label, 0);
+    input.set(new Uint8Array(aekCommitment), label.byteLength);
+    input.set(point, label.byteLength + COMMITMENT_LENGTH);
+    return formatVerificationCode(await digest(input));
 }
 
 /** Exports an ECDH public key JWK as its uncompressed point bytes (65 bytes for P-256). */
@@ -152,15 +176,19 @@ export async function initCircle(
 /**
  * Called by a new device that wants to join the circle.
  *
- * Generates an ephemeral ECDH P-256 key pair for the one-time ceremony.
- * The ephemeral private key is returned to the caller and must be held in
- * memory only — never persisted — until finalizeJoin completes.
+ * Takes the circle's aekCommitment, from the backend, then generates an
+ * ephemeral ECDH P-256 key pair for the one-time ceremony. The order matters:
+ * the commitment is fixed before the key pair exists, so whoever supplied it
+ * can't choose it after seeing the key. Hold the ephemeral private key in
+ * memory only — never persisted — and the commitment with it, until
+ * finalizeJoin completes.
  *
- * The verification code is derived from the ephemeral public key and must
- * be displayed prominently so the user can confirm it matches the code shown
- * on the authorizing device.
+ * The verification code covers the commitment and the ephemeral public key.
+ * Display it prominently: the user must confirm it matches the code on the
+ * authorizing device before finalizing.
  */
 export async function createJoinRequest(
+    aekCommitment: ArrayBuffer | Uint8Array,
     deviceMeta?: { name?: string; platform?: string }
 ): Promise<{
     request: JoinRequest;
@@ -168,9 +196,10 @@ export async function createJoinRequest(
     verificationCode: string;
 }>
 {
+    requireCommitment('createJoinRequest', aekCommitment);
     const { publicKey, privateKey } = await generateECDHKeyPair();
     const ephemeralPublicKey = await exportPublicKeyAsJwk(publicKey);
-    const verificationCode = await deriveVerificationCode(ephemeralPublicKey);
+    const verificationCode = await deriveVerificationCode(ephemeralPublicKey, aekCommitment);
     const deviceId = crypto.randomUUID();
     const request: JoinRequest = {
         deviceId,
@@ -190,9 +219,10 @@ export async function createJoinRequest(
  * which is set by the joining device and can be forged.
  *
  * The caller must present the verification code from
- * joinRequest.ephemeralPublicKey and require explicit user confirmation that
- * it matches the code on the new device before calling this function —
- * calling without confirmation bypasses the primary MITM defence.
+ * joinRequest.ephemeralPublicKey and this device's own aekCommitment (see
+ * deriveVerificationCode) and require explicit user confirmation that it
+ * matches the code on the new device before calling this function — calling
+ * without confirmation bypasses the primary MITM defence.
  *
  * Unwraps the AEK and seals its raw bytes for the new device's ephemeral
  * public key via ECDH. Only the ephemeral private key held by the new device
@@ -234,8 +264,10 @@ export async function authorizeJoin(
  * Unseals the AEK using the ephemeral private key generated in
  * createJoinRequest, verifies it against aekCommitment (SHA-256 of the raw
  * AEK published by initCircle), then re-wraps it under the new device's own
- * passphrase + secretKey. The ephemeral private key is not needed after this
- * call and should be discarded.
+ * passphrase + secretKey. Pass the commitment the request was created with:
+ * the verification code covers that one, so once the user has confirmed the
+ * codes match, it is the authorizing device's. The ephemeral private key is
+ * not needed after this call and should be discarded.
  *
  * Throws if the commitment check fails — the AEK was substituted or tampered
  * with in transit. Do not use the returned wrappedAEK if this throws.
@@ -266,4 +298,14 @@ export async function finalizeJoin(
     const aek = await importAesKey(rawAEK, true); // extractable: true for wrapKey
     const { wrappedKey, salt } = await wrapKey(passphrase, aek, secretKey);
     return { wrappedAEK: { wrappedKey, salt } };
+}
+
+// ---------- Internal ----------
+
+function requireCommitment(caller: string, aekCommitment: ArrayBuffer | Uint8Array): void
+{
+    if (aekCommitment.byteLength !== COMMITMENT_LENGTH)
+    {
+        throw new TypeError(`${caller}: aekCommitment must be ${COMMITMENT_LENGTH} bytes (SHA-256), got ${aekCommitment.byteLength}`);
+    }
 }

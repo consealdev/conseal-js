@@ -67,13 +67,14 @@ async function main()
         ['deriveKey']
     );
 
-    // Reconstruct sealed AEK and commitment from stored base64
+    // Reconstruct the sealed AEK from stored base64
     const sealedAEK = {
         ciphertext: fromBase64(sealedAEKPayload.ciphertext).buffer,
         iv: fromBase64(sealedAEKPayload.iv),
         ephemeralPublicKey: sealedAEKPayload.ephemeralPublicKey,
     };
-    const aekCommitment = fromBase64(sealedAEKPayload.aekCommitment).buffer;
+    // The commitment the service took in step 2, which its verification code covers
+    const aekCommitment = fromBase64(state.aekCommitment);
 
     // Finalize join — recovers the AEK via ECDH, verifies the commitment, re-wraps
     // under the service's own passphrase + secretKey.

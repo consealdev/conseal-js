@@ -113,9 +113,11 @@ node examples/keychain-poc/2-service-join.js
 ```
 
 What it does:
-1. Calls `createJoinRequest` to generate an ephemeral ECDH key pair for the ceremony.
-2. Posts the join request to the relay with a server-stamped arrival time.
-3. Writes `service-state.json` — ephemeral private key and service credentials.
+1. Fetches the scope's `aekCommitment` from the manifest on the relay, before any key pair exists.
+2. Calls `createJoinRequest` with it, to generate an ephemeral ECDH key pair for the ceremony. The verification
+   code covers the commitment and the ephemeral public key.
+3. Posts the join request to the relay with a server-stamped arrival time.
+4. Writes `service-state.json` — the commitment, the ephemeral private key and service credentials.
 
 Output:
 ```
@@ -133,9 +135,9 @@ node examples/keychain-poc/3-human-authorize.js
 What it does:
 1. Loads `human-state.json`.
 2. Fetches the join request from the relay.
-3. Derives the verification code from the service's ephemeral public key and prints it.
+3. Derives the verification code from the service's ephemeral public key and the human's own commitment, and prints it.
 4. Calls `authorizeJoin` to seal the AEK specifically for the service's ephemeral key.
-5. Posts the sealed AEK and commitment to the relay.
+5. Posts the sealed AEK to the relay.
 
 Output:
 ```
@@ -144,9 +146,11 @@ Output:
 [human] sealed AEK posted to relay
 ```
 
-> **Verification code check**: both sides derive the same code from the service's
-> ephemeral public key. A mismatch means the join request was tampered with in transit.
-> In this PoC, compare them visually. A real UI would require an explicit confirmation step.
+> **Verification code check**: both sides derive the same code from the scope's commitment
+> and the service's ephemeral public key, the human from the commitment it holds. A mismatch
+> means the relay swapped the join request's key, or gave the service another key's
+> commitment. In this PoC, compare them visually. A real UI would require an explicit
+> confirmation step.
 
 **Step 4: Service finalizes join and sends encrypted reply**
 
@@ -156,7 +160,7 @@ node examples/keychain-poc/4-service-finalize.js
 
 What it does:
 1. Fetches the sealed AEK from the relay.
-2. Calls `finalizeJoin` to recover the AEK via ECDH and verify the commitment (tamper check).
+2. Calls `finalizeJoin` to recover the AEK via ECDH and verify it against the commitment from step 2 (tamper check).
 3. Re-wraps the AEK under the service's own credentials.
 4. Fetches the human's ECDH public key from the relay.
 5. Calls `sealMessage` to encrypt a reply specifically for the human's public key.
