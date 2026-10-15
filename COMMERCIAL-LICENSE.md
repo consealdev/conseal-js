@@ -1,11 +1,28 @@
 # Conseal Commercial License
 
 Copyright © 2026 Codesense LLC
-License inquiries: licenses@conseal.dev
+License inquiries: license@conseal.dev
 
 ---
 
 `conseal` is dual-licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) and this Commercial License. This file describes the commercial license.
+
+---
+
+## The Software
+
+"The Software" means conseal's SDKs, in source and built form:
+
+- conseal-js, published as `@consealdev/conseal`, including its `/sync` and `/ui` entry points
+- conseal-dotnet, the sync backend, published as `ConsealDev.Conseal`
+
+One commercial license covers both SDKs. The conseal spec is published separately under the MIT License and needs no commercial license.
+
+### Definitions
+
+"Production environment" means any environment in which the Software processes real user data or supports live business operations, including staging environments accessible by end users.
+
+"Production App" means a distinct, independently operated application or automated workflow that uses the Software in a production environment, where "independently operated" means it serves a separate and identifiable purpose, user base, or business function. For the avoidance of doubt: multiple delivery channels (web, mobile, desktop, API) of the same application serving the same purpose and user base constitute a single Production App; the Software's sync backend, when it serves only one Production App's end users, is part of that Production App; all internal business tooling of an organization where the organization's own personnel are the sole end users constitutes a single Production App regardless of the number of internal tools or services involved; a service or component that operates exclusively as part of a larger application and has no independent production deployment is not a separate Production App.
 
 ---
 
@@ -18,6 +35,10 @@ A commercial license is required if you use `conseal` in:
 - Any product or service where you cannot comply with the AGPL-3.0 terms
 
 If your application is fully open source under AGPL-3.0 or a compatible license, you do not need a commercial license.
+
+### Permitted Use
+
+The Software is licensed for use in Production Apps that protect and sync the licensee's own end users' data. The Software may not be used to build or operate a hosted sync, backup, or key management service whose purpose is to provide that infrastructure to third-party applications or organizations for their own end users. Using the Software as the underlying infrastructure for a product that other developers or organizations plug into to protect or sync their users' data is outside the scope of all license tiers.
 
 ### Transitive Dependency
 
@@ -33,11 +54,9 @@ All tiers receive the complete feature set — no capabilities are gated behind 
 
 | Tier | Who | Description |
 |---|---|---|
-| **Indie** | Solo developers, small apps | Flat annual fee, single application |
-| **Business** | Companies, multiple products | Annual fee, unlimited internal applications |
+| **Indie** | Solo developers, small apps | Flat annual fee, one Production App |
+| **Business** | Companies, multiple products | Annual fee per Production App |
 | **Enterprise** | Large organisations, regulated industries | Custom pricing, SLA, legal indemnification |
-
-"Developer" means any individual who writes, modifies, or reviews code that directly integrates or calls the Software's API. The term does not include QA engineers whose sole interaction is executing pre-written test suites, or DevOps engineers whose sole interaction is deploying pre-packaged artifacts.
 
 ---
 
@@ -45,15 +64,17 @@ All tiers receive the complete feature set — no capabilities are gated behind 
 
 Subject to payment of the applicable license fee, Codesense LLC grants the licensee a non-exclusive, worldwide, royalty-free license to:
 
-- Use, copy, modify, and integrate the Software into applications and projects permitted by the purchased tier
-- Distribute the Software as part of compiled or packaged commercial products
-- Deploy the Software across servers, environments, and infrastructure covered by the purchased tier
+- Use, copy, modify, and integrate the Software into the Production Apps covered by the purchased tier
+- Deploy the Software across any number of servers, environments, and infrastructure serving those Production Apps
+- Distribute the Software as a component of those Production Apps
 
 without obligation to publish the licensee's application source code and without the copyleft requirements of the AGPL-3.0.
 
+A separate license is required for each additional Production App in which the licensee uses the Software in a production environment. Development, staging, and test environments that exist solely to support a licensed Production App are covered under the same license as that Production App and do not require separate licenses.
+
 ### Evaluation
 
-Evaluation and testing in non-production environments is permitted without a commercial license for a period not exceeding 30 days. "Production environment" means any environment in which the Software processes real user data or supports live business operations, including staging environments accessible by end users.
+Evaluation and testing in non-production environments is permitted without a commercial license for a period not exceeding 30 days.
 
 ### License Fees and Renewal
 
@@ -81,7 +102,7 @@ Licensees agree not to make false statements of fact about `conseal`, Codesense 
 
 ## Data and Privacy
 
-Codesense LLC does not collect, process, or retain any data that the licensee processes through the Software. `conseal` is a zero-knowledge cryptography library; all data processed by the Software remains solely within the licensee's infrastructure. For more information, see the Codesense LLC Privacy Policy at conseal.dev/privacy.
+Codesense LLC does not collect, process, or retain any data that the licensee processes through the Software. `conseal` encrypts data on the devices of the licensee's end users, and its sync backend runs on infrastructure the licensee operates. For more information, see the Codesense LLC Privacy Policy at codesense.dev/privacy.
 
 ---
 
@@ -99,12 +120,12 @@ THIS SOFTWARE IS PROVIDED "AS IS," WITHOUT A WARRANTY OF ANY KIND, EXPRESS OR IM
 
 ## Governing Law and Dispute Resolution
 
-This license is governed by and construed in accordance with the laws of the State of Delaware, United States, without regard to its conflict of law provisions.
+This license is governed by and construed in accordance with the laws of the State of Texas, United States, without regard to its conflict of law provisions.
 
-Any dispute arising out of or relating to this license or the Software shall be resolved by binding arbitration administered by the American Arbitration Association under its Commercial Arbitration Rules. Judgment on the award rendered by the arbitrator may be entered in any court of competent jurisdiction.
+Any dispute arising out of or relating to this license or the Software shall be resolved by binding arbitration administered by the American Arbitration Association under its Commercial Arbitration Rules. The arbitration shall take place in Plano, Texas. Judgment on the award rendered by the arbitrator may be entered in any court of competent jurisdiction.
 
 Notwithstanding the foregoing, either party may seek injunctive or other equitable relief in any court of competent jurisdiction to prevent the actual or threatened infringement, misappropriation, or violation of a party's intellectual property rights.
 
 ---
 
-For license purchases and inquiries: **licenses@conseal.dev** | conseal.dev/pricing
+For license purchases and inquiries: **license@conseal.dev**
