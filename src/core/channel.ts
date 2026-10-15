@@ -34,25 +34,26 @@
  * No custom cryptography — correct composition of audited primitives only.
  */
 
-import { seal, unseal, generateAesKey, importAesKey } from './aes.js'
-import { generateECDHKeyPair, sealMessage, unsealMessage } from './ecdh.js'
-import { importPublicKeyFromJwk, exportPublicKeyAsJwk } from './jwk.js'
-import { digest } from './digest.js'
-import { buffersEqual } from './compare.js'
-import { JOIN_TTL_MS, exportRawPublicKey, formatVerificationCode, type SealedAEK } from './circle.js'
+import { seal, unseal, generateAesKey, importAesKey } from './aes.js';
+import { generateECDHKeyPair, sealMessage, unsealMessage } from './ecdh.js';
+import { importPublicKeyFromJwk, exportPublicKeyAsJwk } from './jwk.js';
+import { digest } from './digest.js';
+import { buffersEqual } from './compare.js';
+import { JOIN_TTL_MS, exportRawPublicKey, formatVerificationCode, type SealedAEK } from './circle.js';
 
-const IV_LENGTH = 12
-const COMMITMENT_LENGTH = 32
-const WRAPPED_LENGTH = IV_LENGTH + 32 + 16 // IV ‖ the 32-byte key ‖ its 128-bit tag
-const WRAP_LABEL = 'conseal-channel:v1:'
-const CODE_LABEL = 'conseal-channel-invite:v1'
+const IV_LENGTH = 12;
+const COMMITMENT_LENGTH = 32;
+const WRAPPED_LENGTH = IV_LENGTH + 32 + 16; // IV ‖ the 32-byte key ‖ its 128-bit tag
+const WRAP_LABEL = 'conseal-channel:v1:';
+const CODE_LABEL = 'conseal-channel-invite:v1';
 
 // ---------- Types ----------
 
 /** Serializable request an invitee sends to the backend to join a channel. */
-export interface ChannelJoinRequest {
-  channelId: string
-  ephemeralPublicKey: JsonWebKey
+export interface ChannelJoinRequest
+{
+    channelId: string;
+    ephemeralPublicKey: JsonWebKey;
 }
 
 // ---------- Channel keys ----------
@@ -70,20 +71,21 @@ export interface ChannelJoinRequest {
  * AEK, which their own mnemonic recovers.
  */
 export async function createChannel(circleAEK: CryptoKey): Promise<{
-  channelId: string
-  channelAEK: CryptoKey
-  wrappedChannelAEK: ArrayBuffer
-  aekCommitment: ArrayBuffer
-}> {
-  const channelId = crypto.randomUUID()
-  const key = await generateAesKey(true) // extractable: true — the raw bytes are wrapped and committed to
-  const rawAEK = await crypto.subtle.exportKey('raw', key)
-  // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
-  // way to zero them, but they are consumed immediately by wrap(), digest() and importAesKey().
-  const wrappedChannelAEK = await wrap(circleAEK, channelId, rawAEK)
-  const aekCommitment = await digest(rawAEK)
-  const channelAEK = await importAesKey(rawAEK)
-  return { channelId, channelAEK, wrappedChannelAEK, aekCommitment }
+    channelId: string;
+    channelAEK: CryptoKey;
+    wrappedChannelAEK: ArrayBuffer;
+    aekCommitment: ArrayBuffer;
+}>
+{
+    const channelId = crypto.randomUUID();
+    const key = await generateAesKey(true); // extractable: true — the raw bytes are wrapped and committed to
+    const rawAEK = await crypto.subtle.exportKey('raw', key);
+    // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
+    // way to zero them, but they are consumed immediately by wrap(), digest() and importAesKey().
+    const wrappedChannelAEK = await wrap(circleAEK, channelId, rawAEK);
+    const aekCommitment = await digest(rawAEK);
+    const channelAEK = await importAesKey(rawAEK);
+    return { channelId, channelAEK, wrappedChannelAEK, aekCommitment };
 }
 
 /**
@@ -94,12 +96,13 @@ export async function createChannel(circleAEK: CryptoKey): Promise<{
  * was wrapped for another channel, or under another circle AEK.
  */
 export async function unwrapChannelAEK(
-  channelId: string,
-  wrappedChannelAEK: ArrayBuffer | Uint8Array,
-  circleAEK: CryptoKey
-): Promise<CryptoKey> {
-  const rawAEK = await unwrap('unwrapChannelAEK', circleAEK, channelId, wrappedChannelAEK)
-  return importAesKey(rawAEK)
+    channelId: string,
+    wrappedChannelAEK: ArrayBuffer | Uint8Array,
+    circleAEK: CryptoKey
+): Promise<CryptoKey>
+{
+    const rawAEK = await unwrap('unwrapChannelAEK', circleAEK, channelId, wrappedChannelAEK);
+    return importAesKey(rawAEK);
 }
 
 // ---------- Invite ceremony ----------
@@ -119,19 +122,20 @@ export async function unwrapChannelAEK(
  * matches the code on the inviting member's device before finalizing.
  */
 export async function createChannelJoinRequest(
-  channelId: string,
-  aekCommitment: ArrayBuffer | Uint8Array
+    channelId: string,
+    aekCommitment: ArrayBuffer | Uint8Array
 ): Promise<{
-  request: ChannelJoinRequest
-  ephemeralPrivateKey: CryptoKey
-  verificationCode: string
-}> {
-  requireChannelId('createChannelJoinRequest', channelId)
-  requireCommitment('createChannelJoinRequest', aekCommitment)
-  const { publicKey, privateKey } = await generateECDHKeyPair()
-  const ephemeralPublicKey = await exportPublicKeyAsJwk(publicKey)
-  const verificationCode = await channelCode(channelId, aekCommitment, ephemeralPublicKey)
-  return { request: { channelId, ephemeralPublicKey }, ephemeralPrivateKey: privateKey, verificationCode }
+    request: ChannelJoinRequest;
+    ephemeralPrivateKey: CryptoKey;
+    verificationCode: string;
+}>
+{
+    requireChannelId('createChannelJoinRequest', channelId);
+    requireCommitment('createChannelJoinRequest', aekCommitment);
+    const { publicKey, privateKey } = await generateECDHKeyPair();
+    const ephemeralPublicKey = await exportPublicKeyAsJwk(publicKey);
+    const verificationCode = await channelCode(channelId, aekCommitment, ephemeralPublicKey);
+    return { request: { channelId, ephemeralPublicKey }, ephemeralPrivateKey: privateKey, verificationCode };
 }
 
 /**
@@ -145,12 +149,13 @@ export async function createChannelJoinRequest(
  * that confirmation bypasses the ceremony's defence against a substituted key.
  */
 export async function deriveChannelVerificationCode(
-  joinRequest: ChannelJoinRequest,
-  wrappedChannelAEK: ArrayBuffer | Uint8Array,
-  circleAEK: CryptoKey
-): Promise<string> {
-  const rawAEK = await unwrap('deriveChannelVerificationCode', circleAEK, joinRequest.channelId, wrappedChannelAEK)
-  return channelCode(joinRequest.channelId, await digest(rawAEK), joinRequest.ephemeralPublicKey)
+    joinRequest: ChannelJoinRequest,
+    wrappedChannelAEK: ArrayBuffer | Uint8Array,
+    circleAEK: CryptoKey
+): Promise<string>
+{
+    const rawAEK = await unwrap('deriveChannelVerificationCode', circleAEK, joinRequest.channelId, wrappedChannelAEK);
+    return channelCode(joinRequest.channelId, await digest(rawAEK), joinRequest.ephemeralPublicKey);
 }
 
 /**
@@ -164,22 +169,24 @@ export async function deriveChannelVerificationCode(
  * public key via ECDH. Only the invitee's ephemeral private key can open it.
  */
 export async function authorizeChannelJoin(
-  joinRequest: ChannelJoinRequest,
-  wrappedChannelAEK: ArrayBuffer | Uint8Array,
-  circleAEK: CryptoKey,
-  serverReceivedAt: number
-): Promise<SealedAEK> {
-  const age = Date.now() - serverReceivedAt
-  if (age > JOIN_TTL_MS) {
-    throw new Error('authorizeChannelJoin: join request has expired (older than 5 minutes)')
-  }
+    joinRequest: ChannelJoinRequest,
+    wrappedChannelAEK: ArrayBuffer | Uint8Array,
+    circleAEK: CryptoKey,
+    serverReceivedAt: number
+): Promise<SealedAEK>
+{
+    const age = Date.now() - serverReceivedAt;
+    if (age > JOIN_TTL_MS)
+    {
+        throw new Error('authorizeChannelJoin: join request has expired (older than 5 minutes)');
+    }
 
-  const rawAEK = await unwrap('authorizeChannelJoin', circleAEK, joinRequest.channelId, wrappedChannelAEK)
-  // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
-  // way to zero them, but they are consumed immediately by sealMessage() and never returned.
-  const recipientPublicKey = await importPublicKeyFromJwk(joinRequest.ephemeralPublicKey, 'ECDH')
-  const { ciphertext, iv, ephemeralPublicKey } = await sealMessage(recipientPublicKey, rawAEK)
-  return { ciphertext, iv, ephemeralPublicKey }
+    const rawAEK = await unwrap('authorizeChannelJoin', circleAEK, joinRequest.channelId, wrappedChannelAEK);
+    // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
+    // way to zero them, but they are consumed immediately by sealMessage() and never returned.
+    const recipientPublicKey = await importPublicKeyFromJwk(joinRequest.ephemeralPublicKey, 'ECDH');
+    const { ciphertext, iv, ephemeralPublicKey } = await sealMessage(recipientPublicKey, rawAEK);
+    return { ciphertext, iv, ephemeralPublicKey };
 }
 
 /**
@@ -196,60 +203,66 @@ export async function authorizeChannelJoin(
  * with in transit. Store nothing if this throws.
  */
 export async function finalizeChannelJoin(
-  sealedAEK: SealedAEK,
-  ephemeralPrivateKey: CryptoKey,
-  circleAEK: CryptoKey,
-  channelId: string,
-  aekCommitment: ArrayBuffer | Uint8Array
-): Promise<{ channelAEK: CryptoKey; wrappedChannelAEK: ArrayBuffer }> {
-  requireChannelId('finalizeChannelJoin', channelId)
-  requireCommitment('finalizeChannelJoin', aekCommitment)
-  const rawAEK = await unsealMessage(
-    ephemeralPrivateKey,
-    sealedAEK.ciphertext,
-    sealedAEK.iv,
-    sealedAEK.ephemeralPublicKey
-  )
-  // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
-  // way to zero them, but they are consumed immediately by digest(), wrap() and importAesKey().
+    sealedAEK: SealedAEK,
+    ephemeralPrivateKey: CryptoKey,
+    circleAEK: CryptoKey,
+    channelId: string,
+    aekCommitment: ArrayBuffer | Uint8Array
+): Promise<{ channelAEK: CryptoKey; wrappedChannelAEK: ArrayBuffer }>
+{
+    requireChannelId('finalizeChannelJoin', channelId);
+    requireCommitment('finalizeChannelJoin', aekCommitment);
+    const rawAEK = await unsealMessage(
+        ephemeralPrivateKey,
+        sealedAEK.ciphertext,
+        sealedAEK.iv,
+        sealedAEK.ephemeralPublicKey
+    );
+    // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
+    // way to zero them, but they are consumed immediately by digest(), wrap() and importAesKey().
 
-  const actualCommitment = await digest(rawAEK)
-  if (!buffersEqual(new Uint8Array(actualCommitment), bytesOf(aekCommitment))) {
-    throw new Error('finalizeChannelJoin: channel AEK commitment mismatch — key may have been tampered with')
-  }
+    const actualCommitment = await digest(rawAEK);
+    if (!buffersEqual(new Uint8Array(actualCommitment), bytesOf(aekCommitment)))
+    {
+        throw new Error('finalizeChannelJoin: channel AEK commitment mismatch — key may have been tampered with');
+    }
 
-  const wrappedChannelAEK = await wrap(circleAEK, channelId, rawAEK)
-  const channelAEK = await importAesKey(rawAEK)
-  return { channelAEK, wrappedChannelAEK }
+    const wrappedChannelAEK = await wrap(circleAEK, channelId, rawAEK);
+    const channelAEK = await importAesKey(rawAEK);
+    return { channelAEK, wrappedChannelAEK };
 }
 
 // ---------- Internal ----------
 
-async function wrap(circleAEK: CryptoKey, channelId: string, rawAEK: ArrayBuffer): Promise<ArrayBuffer> {
-  const { ciphertext, iv } = await seal(circleAEK, rawAEK, wrapAad(channelId))
-  // Prepend the IV, as wrapKey does, so a wrapped key is a single value
-  const wrapped = new Uint8Array(IV_LENGTH + ciphertext.byteLength)
-  wrapped.set(iv, 0)
-  wrapped.set(new Uint8Array(ciphertext), IV_LENGTH)
-  return wrapped.buffer
+async function wrap(circleAEK: CryptoKey, channelId: string, rawAEK: ArrayBuffer): Promise<ArrayBuffer>
+{
+    const { ciphertext, iv } = await seal(circleAEK, rawAEK, wrapAad(channelId));
+    // Prepend the IV, as wrapKey does, so a wrapped key is a single value
+    const wrapped = new Uint8Array(IV_LENGTH + ciphertext.byteLength);
+    wrapped.set(iv, 0);
+    wrapped.set(new Uint8Array(ciphertext), IV_LENGTH);
+    return wrapped.buffer;
 }
 
 async function unwrap(
-  caller: string,
-  circleAEK: CryptoKey,
-  channelId: string,
-  wrappedChannelAEK: ArrayBuffer | Uint8Array
-): Promise<ArrayBuffer> {
-  requireChannelId(caller, channelId)
-  const bytes = bytesOf(wrappedChannelAEK)
-  if (bytes.byteLength !== WRAPPED_LENGTH) {
-    throw new TypeError(`${caller}: wrapped channel AEK must be ${WRAPPED_LENGTH} bytes, got ${bytes.byteLength}`)
-  }
-  return unseal(circleAEK, bytes.slice(IV_LENGTH).buffer, bytes.slice(0, IV_LENGTH), wrapAad(channelId))
+    caller: string,
+    circleAEK: CryptoKey,
+    channelId: string,
+    wrappedChannelAEK: ArrayBuffer | Uint8Array
+): Promise<ArrayBuffer>
+{
+    requireChannelId(caller, channelId);
+    const bytes = bytesOf(wrappedChannelAEK);
+    if (bytes.byteLength !== WRAPPED_LENGTH)
+    {
+        throw new TypeError(`${caller}: wrapped channel AEK must be ${WRAPPED_LENGTH} bytes, got ${bytes.byteLength}`);
+    }
+    return unseal(circleAEK, bytes.slice(IV_LENGTH).buffer, bytes.slice(0, IV_LENGTH), wrapAad(channelId));
 }
 
-function wrapAad(channelId: string): Uint8Array {
-  return new TextEncoder().encode(WRAP_LABEL + channelId)
+function wrapAad(channelId: string): Uint8Array
+{
+    return new TextEncoder().encode(WRAP_LABEL + channelId);
 }
 
 /**
@@ -258,38 +271,45 @@ function wrapAad(channelId: string): Uint8Array {
  * has a fixed length, so the input splits only one way.
  */
 async function channelCode(
-  channelId: string,
-  aekCommitment: ArrayBuffer | Uint8Array,
-  ephemeralPublicKey: JsonWebKey
-): Promise<string> {
-  const encoder = new TextEncoder()
-  const parts = [
-    encoder.encode(CODE_LABEL),
-    bytesOf(aekCommitment),
-    new Uint8Array(await exportRawPublicKey(ephemeralPublicKey)),
-    encoder.encode(channelId),
-  ]
-  const input = new Uint8Array(parts.reduce((length, part) => length + part.byteLength, 0))
-  let offset = 0
-  for (const part of parts) {
-    input.set(part, offset)
-    offset += part.byteLength
-  }
-  return formatVerificationCode(await digest(input))
+    channelId: string,
+    aekCommitment: ArrayBuffer | Uint8Array,
+    ephemeralPublicKey: JsonWebKey
+): Promise<string>
+{
+    const encoder = new TextEncoder();
+    const parts = [
+        encoder.encode(CODE_LABEL),
+        bytesOf(aekCommitment),
+        new Uint8Array(await exportRawPublicKey(ephemeralPublicKey)),
+        encoder.encode(channelId),
+    ];
+    const input = new Uint8Array(parts.reduce((length, part) => length + part.byteLength, 0));
+    let offset = 0;
+    for (const part of parts)
+    {
+        input.set(part, offset);
+        offset += part.byteLength;
+    }
+    return formatVerificationCode(await digest(input));
 }
 
-function requireChannelId(caller: string, channelId: string): void {
-  if (typeof channelId !== 'string' || channelId.length === 0) {
-    throw new TypeError(`${caller}: channelId must be a non-empty string`)
-  }
+function requireChannelId(caller: string, channelId: string): void
+{
+    if (typeof channelId !== 'string' || channelId.length === 0)
+    {
+        throw new TypeError(`${caller}: channelId must be a non-empty string`);
+    }
 }
 
-function requireCommitment(caller: string, aekCommitment: ArrayBuffer | Uint8Array): void {
-  if (aekCommitment.byteLength !== COMMITMENT_LENGTH) {
-    throw new TypeError(`${caller}: aekCommitment must be ${COMMITMENT_LENGTH} bytes (SHA-256), got ${aekCommitment.byteLength}`)
-  }
+function requireCommitment(caller: string, aekCommitment: ArrayBuffer | Uint8Array): void
+{
+    if (aekCommitment.byteLength !== COMMITMENT_LENGTH)
+    {
+        throw new TypeError(`${caller}: aekCommitment must be ${COMMITMENT_LENGTH} bytes (SHA-256), got ${aekCommitment.byteLength}`);
+    }
 }
 
-function bytesOf(data: ArrayBuffer | Uint8Array): Uint8Array {
-  return data instanceof Uint8Array ? data : new Uint8Array(data)
+function bytesOf(data: ArrayBuffer | Uint8Array): Uint8Array
+{
+    return data instanceof Uint8Array ? data : new Uint8Array(data);
 }

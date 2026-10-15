@@ -17,8 +17,9 @@
  */
 
 /** Generates a random 128-bit (16-byte) secret key. */
-export function generateSecretKey(): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(16))
+export function generateSecretKey(): Uint8Array
+{
+    return crypto.getRandomValues(new Uint8Array(16));
 }
 
 /**
@@ -30,18 +31,19 @@ export function generateSecretKey(): Uint8Array {
  * cryptographic binding of both factors.
  */
 export async function combinePassphraseAndSecretKey(
-  passphrase: string,
-  secretKey: Uint8Array
-): Promise<string> {
-  const hmacKey = await crypto.subtle.importKey(
-    'raw',
-    secretKey.buffer.slice(secretKey.byteOffset, secretKey.byteOffset + secretKey.byteLength) as ArrayBuffer,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  const mac = await crypto.subtle.sign('HMAC', hmacKey, new TextEncoder().encode(passphrase))
-  return Array.from(new Uint8Array(mac))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+    passphrase: string,
+    secretKey: Uint8Array
+): Promise<string>
+{
+    const hmacKey = await crypto.subtle.importKey(
+        'raw',
+        secretKey.buffer.slice(secretKey.byteOffset, secretKey.byteOffset + secretKey.byteLength) as ArrayBuffer,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    const mac = await crypto.subtle.sign('HMAC', hmacKey, new TextEncoder().encode(passphrase));
+    return Array.from(new Uint8Array(mac))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 }

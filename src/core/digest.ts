@@ -9,6 +9,7 @@
  */
 
 /** Returns the SHA-256 hash of the input data as an ArrayBuffer. */
-export async function digest(data: ArrayBuffer | Uint8Array): Promise<ArrayBuffer> {
-  return crypto.subtle.digest('SHA-256', data as BufferSource)
+export async function digest(data: ArrayBuffer | Uint8Array): Promise<ArrayBuffer>
+{
+    return crypto.subtle.digest('SHA-256', data as BufferSource);
 }

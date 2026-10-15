@@ -15,15 +15,16 @@
  * Dependency: @scure/bip39 (browser-compatible, audited)
  */
 
-import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from '@scure/bip39'
-import { wordlist } from '@scure/bip39/wordlists/english.js'
+import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 
 /** Generates a fresh 24-word BIP-39 mnemonic (256 bits of entropy). */
-export function generateMnemonic(): string {
-  // Use the browser's crypto.getRandomValues directly instead of @noble/hashes randomBytes
-  // (which accesses globalThis.crypto and triggers false "network access" warnings on socket.dev)
-  const entropy = crypto.getRandomValues(new Uint8Array(32)) // 256 bits → 24 words
-  return entropyToMnemonic(entropy, wordlist)
+export function generateMnemonic(): string
+{
+    // Use the browser's crypto.getRandomValues directly instead of @noble/hashes randomBytes
+    // (which accesses globalThis.crypto and triggers false "network access" warnings on socket.dev)
+    const entropy = crypto.getRandomValues(new Uint8Array(32)); // 256 bits → 24 words
+    return entropyToMnemonic(entropy, wordlist);
 }
 
 /**
@@ -39,27 +40,29 @@ export function generateMnemonic(): string {
  * Pass extractable: true when the key must be wrapped before storage —
  * e.g. to re-wrap it under a new passphrase with wrapKey().
  */
-export async function recoverWithMnemonic(mnemonic: string, extractable = false): Promise<CryptoKey> {
-  if (!validateMnemonic(mnemonic, wordlist)) {
-    throw new Error('Invalid mnemonic: phrase does not pass BIP-39 checksum validation')
-  }
-  // mnemonicToEntropy returns the raw entropy bytes — 32 bytes for a 24-word phrase
-  // .slice() creates a copy backed by a plain ArrayBuffer (required by SubtleCrypto)
-  const entropy = mnemonicToEntropy(mnemonic, wordlist).slice()
-  // Import entropy as HKDF key material, then derive the AES-GCM key.
-  // Empty salt is acceptable here because the IKM is already uniformly random
-  // (crypto.getRandomValues); the info label provides domain separation.
-  const hkdfKey = await crypto.subtle.importKey('raw', entropy, 'HKDF', false, ['deriveKey'])
-  return crypto.subtle.deriveKey(
+export async function recoverWithMnemonic(mnemonic: string, extractable = false): Promise<CryptoKey>
+{
+    if (!validateMnemonic(mnemonic, wordlist))
     {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: new Uint8Array(0),
-      info: new TextEncoder().encode('conseal-mnemonic-aek-v1'),
-    },
-    hkdfKey,
-    { name: 'AES-GCM', length: 256 },
-    extractable,
-    ['encrypt', 'decrypt']
-  )
+        throw new Error('Invalid mnemonic: phrase does not pass BIP-39 checksum validation');
+    }
+    // mnemonicToEntropy returns the raw entropy bytes — 32 bytes for a 24-word phrase
+    // .slice() creates a copy backed by a plain ArrayBuffer (required by SubtleCrypto)
+    const entropy = mnemonicToEntropy(mnemonic, wordlist).slice();
+    // Import entropy as HKDF key material, then derive the AES-GCM key.
+    // Empty salt is acceptable here because the IKM is already uniformly random
+    // (crypto.getRandomValues); the info label provides domain separation.
+    const hkdfKey = await crypto.subtle.importKey('raw', entropy, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+        {
+            name: 'HKDF',
+            hash: 'SHA-256',
+            salt: new Uint8Array(0),
+            info: new TextEncoder().encode('conseal-mnemonic-aek-v1'),
+        },
+        hkdfKey,
+        { name: 'AES-GCM', length: 256 },
+        extractable,
+        ['encrypt', 'decrypt']
+    );
 }

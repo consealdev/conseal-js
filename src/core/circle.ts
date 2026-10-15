@@ -24,46 +24,49 @@
  * No custom cryptography — correct composition of audited primitives only.
  */
 
-import { importAesKey } from './aes.js'
-import { wrapKey, unwrapKey } from './pbkdf2.js'
-import { generateECDHKeyPair, sealMessage, unsealMessage } from './ecdh.js'
-import { importPublicKeyFromJwk, exportPublicKeyAsJwk } from './jwk.js'
-import { digest } from './digest.js'
-import { recoverWithMnemonic } from './mnemonic.js'
-import { buffersEqual } from './compare.js'
+import { importAesKey } from './aes.js';
+import { wrapKey, unwrapKey } from './pbkdf2.js';
+import { generateECDHKeyPair, sealMessage, unsealMessage } from './ecdh.js';
+import { importPublicKeyFromJwk, exportPublicKeyAsJwk } from './jwk.js';
+import { digest } from './digest.js';
+import { recoverWithMnemonic } from './mnemonic.js';
+import { buffersEqual } from './compare.js';
 
 /** Maximum age of a join request before it is considered stale (5 minutes). */
-export const JOIN_TTL_MS = 5 * 60 * 1000
+export const JOIN_TTL_MS = 5 * 60 * 1000;
 
-const CODE_BYTES = 10 // 80 bits, 16 base32 characters
-const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ' // Crockford base32: no I, L, O or U
+const CODE_BYTES = 10; // 80 bits, 16 base32 characters
+const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford base32: no I, L, O or U
 
 // ---------- Types ----------
 
 /** Wrapped AEK — opaque blob stored server-side per device. */
-export interface WrappedAEK {
-  wrappedKey: ArrayBuffer
-  salt: Uint8Array
+export interface WrappedAEK
+{
+    wrappedKey: ArrayBuffer;
+    salt: Uint8Array;
 }
 
 /** Serializable join request payload sent by a new device to the backend. */
-export interface JoinRequest {
-  deviceId: string
-  ephemeralPublicKey: JsonWebKey
-  /**
-   * ISO 8601 timestamp set by the joining device, for display only. The device
-   * can forge it, so `authorizeJoin` doesn't read it: it checks freshness
-   * against `serverReceivedAt`, the time the backend first received the request.
-   */
-  createdAt: string
-  deviceMeta?: { name?: string; platform?: string }
+export interface JoinRequest
+{
+    deviceId: string;
+    ephemeralPublicKey: JsonWebKey;
+    /**
+     * ISO 8601 timestamp set by the joining device, for display only. The device
+     * can forge it, so `authorizeJoin` doesn't read it: it checks freshness
+     * against `serverReceivedAt`, the time the backend first received the request.
+     */
+    createdAt: string;
+    deviceMeta?: { name?: string; platform?: string };
 }
 
 /** AEK sealed for a specific device's ephemeral public key via ECDH. */
-export interface SealedAEK {
-  ciphertext: ArrayBuffer
-  iv: Uint8Array
-  ephemeralPublicKey: JsonWebKey // sealMessage's ephemeral key — not the joining device's
+export interface SealedAEK
+{
+    ciphertext: ArrayBuffer;
+    iv: Uint8Array;
+    ephemeralPublicKey: JsonWebKey; // sealMessage's ephemeral key — not the joining device's
 }
 
 // ---------- Exported helpers ----------
@@ -85,30 +88,35 @@ export interface SealedAEK {
  * would serve every join since the code covers the key alone. At 32 bits, one
  * GPU finds a match in under a minute.
  */
-export async function deriveVerificationCode(ephemeralPublicKey: JsonWebKey): Promise<string> {
-  return formatVerificationCode(await digest(await exportRawPublicKey(ephemeralPublicKey)))
+export async function deriveVerificationCode(ephemeralPublicKey: JsonWebKey): Promise<string>
+{
+    return formatVerificationCode(await digest(await exportRawPublicKey(ephemeralPublicKey)));
 }
 
 /** Exports an ECDH public key JWK as its uncompressed point bytes (65 bytes for P-256). */
-export async function exportRawPublicKey(publicKey: JsonWebKey): Promise<ArrayBuffer> {
-  const key = await importPublicKeyFromJwk(publicKey, 'ECDH')
-  return crypto.subtle.exportKey('raw', key)
+export async function exportRawPublicKey(publicKey: JsonWebKey): Promise<ArrayBuffer>
+{
+    const key = await importPublicKeyFromJwk(publicKey, 'ECDH');
+    return crypto.subtle.exportKey('raw', key);
 }
 
 /** Formats the first 80 bits of a hash as Crockford base32 in four groups of four: "7KQ2-M9XD-4RTF-B8NW". */
-export function formatVerificationCode(hash: ArrayBuffer): string {
-  let chars = ''
-  let value = 0
-  let bits = 0
-  for (const byte of new Uint8Array(hash, 0, CODE_BYTES)) {
-    value = ((value << 8) | byte) & 0xfff // at most 4 bits carry over, plus this byte
-    bits += 8
-    while (bits >= 5) {
-      bits -= 5
-      chars += CODE_ALPHABET.charAt((value >> bits) & 31)
+export function formatVerificationCode(hash: ArrayBuffer): string
+{
+    let chars = '';
+    let value = 0;
+    let bits = 0;
+    for (const byte of new Uint8Array(hash, 0, CODE_BYTES))
+    {
+        value = ((value << 8) | byte) & 0xfff; // at most 4 bits carry over, plus this byte
+        bits += 8;
+        while (bits >= 5)
+        {
+            bits -= 5;
+            chars += CODE_ALPHABET.charAt((value >> bits) & 31);
+        }
     }
-  }
-  return [0, 4, 8, 12].map(start => chars.slice(start, start + 4)).join('-')
+    return [0, 4, 8, 12].map(start => chars.slice(start, start + 4)).join('-');
 }
 
 // ---------- Ceremony API ----------
@@ -126,18 +134,19 @@ export function formatVerificationCode(hash: ArrayBuffer): string {
  * the server.
  */
 export async function initCircle(
-  mnemonic: string,
-  passphrase: string,
-  secretKey: Uint8Array
-): Promise<{ wrappedAEK: WrappedAEK; aekCommitment: ArrayBuffer; deviceId: string }> {
-  const aek = await recoverWithMnemonic(mnemonic, true) // extractable: true — must be wrappable
-  const rawAEK = await crypto.subtle.exportKey('raw', aek)
-  // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
-  // way to zero them, but they are consumed immediately by digest() and wrapKey().
-  const aekCommitment = await digest(rawAEK)
-  const { wrappedKey, salt } = await wrapKey(passphrase, aek, secretKey)
-  const deviceId = crypto.randomUUID()
-  return { wrappedAEK: { wrappedKey, salt }, aekCommitment, deviceId }
+    mnemonic: string,
+    passphrase: string,
+    secretKey: Uint8Array
+): Promise<{ wrappedAEK: WrappedAEK; aekCommitment: ArrayBuffer; deviceId: string }>
+{
+    const aek = await recoverWithMnemonic(mnemonic, true); // extractable: true — must be wrappable
+    const rawAEK = await crypto.subtle.exportKey('raw', aek);
+    // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
+    // way to zero them, but they are consumed immediately by digest() and wrapKey().
+    const aekCommitment = await digest(rawAEK);
+    const { wrappedKey, salt } = await wrapKey(passphrase, aek, secretKey);
+    const deviceId = crypto.randomUUID();
+    return { wrappedAEK: { wrappedKey, salt }, aekCommitment, deviceId };
 }
 
 /**
@@ -152,23 +161,24 @@ export async function initCircle(
  * on the authorizing device.
  */
 export async function createJoinRequest(
-  deviceMeta?: { name?: string; platform?: string }
+    deviceMeta?: { name?: string; platform?: string }
 ): Promise<{
-  request: JoinRequest
-  ephemeralPrivateKey: CryptoKey
-  verificationCode: string
-}> {
-  const { publicKey, privateKey } = await generateECDHKeyPair()
-  const ephemeralPublicKey = await exportPublicKeyAsJwk(publicKey)
-  const verificationCode = await deriveVerificationCode(ephemeralPublicKey)
-  const deviceId = crypto.randomUUID()
-  const request: JoinRequest = {
-    deviceId,
-    ephemeralPublicKey,
-    createdAt: new Date().toISOString(),
-    ...(deviceMeta ? { deviceMeta } : {}),
-  }
-  return { request, ephemeralPrivateKey: privateKey, verificationCode }
+    request: JoinRequest;
+    ephemeralPrivateKey: CryptoKey;
+    verificationCode: string;
+}>
+{
+    const { publicKey, privateKey } = await generateECDHKeyPair();
+    const ephemeralPublicKey = await exportPublicKeyAsJwk(publicKey);
+    const verificationCode = await deriveVerificationCode(ephemeralPublicKey);
+    const deviceId = crypto.randomUUID();
+    const request: JoinRequest = {
+        deviceId,
+        ephemeralPublicKey,
+        createdAt: new Date().toISOString(),
+        ...(deviceMeta ? { deviceMeta } : {}),
+    };
+    return { request, ephemeralPrivateKey: privateKey, verificationCode };
 }
 
 /**
@@ -194,26 +204,28 @@ export async function createJoinRequest(
  *   timestamp defeats TTL enforcement.
  */
 export async function authorizeJoin(
-  joinRequest: JoinRequest,
-  wrappedAEK: WrappedAEK,
-  passphrase: string,
-  secretKey: Uint8Array,
-  serverReceivedAt: number
-): Promise<SealedAEK> {
-  const age = Date.now() - serverReceivedAt
-  if (age > JOIN_TTL_MS) {
-    throw new Error('authorizeJoin: join request has expired (older than 5 minutes)')
-  }
+    joinRequest: JoinRequest,
+    wrappedAEK: WrappedAEK,
+    passphrase: string,
+    secretKey: Uint8Array,
+    serverReceivedAt: number
+): Promise<SealedAEK>
+{
+    const age = Date.now() - serverReceivedAt;
+    if (age > JOIN_TTL_MS)
+    {
+        throw new Error('authorizeJoin: join request has expired (older than 5 minutes)');
+    }
 
-  // Unwrap extractable so raw bytes can be transferred via ECDH
-  const aek = await unwrapKey(passphrase, wrappedAEK.wrappedKey, wrappedAEK.salt, secretKey, true)
-  const rawAEK = await crypto.subtle.exportKey('raw', aek)
-  // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
-  // way to zero them, but they are consumed immediately by sealMessage() and never returned.
+    // Unwrap extractable so raw bytes can be transferred via ECDH
+    const aek = await unwrapKey(passphrase, wrappedAEK.wrappedKey, wrappedAEK.salt, secretKey, true);
+    const rawAEK = await crypto.subtle.exportKey('raw', aek);
+    // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
+    // way to zero them, but they are consumed immediately by sealMessage() and never returned.
 
-  const recipientPublicKey = await importPublicKeyFromJwk(joinRequest.ephemeralPublicKey, 'ECDH')
-  const { ciphertext, iv, ephemeralPublicKey } = await sealMessage(recipientPublicKey, rawAEK)
-  return { ciphertext, iv, ephemeralPublicKey }
+    const recipientPublicKey = await importPublicKeyFromJwk(joinRequest.ephemeralPublicKey, 'ECDH');
+    const { ciphertext, iv, ephemeralPublicKey } = await sealMessage(recipientPublicKey, rawAEK);
+    return { ciphertext, iv, ephemeralPublicKey };
 }
 
 /**
@@ -229,27 +241,29 @@ export async function authorizeJoin(
  * with in transit. Do not use the returned wrappedAEK if this throws.
  */
 export async function finalizeJoin(
-  sealedAEK: SealedAEK,
-  ephemeralPrivateKey: CryptoKey,
-  passphrase: string,
-  secretKey: Uint8Array,
-  aekCommitment: ArrayBuffer
-): Promise<{ wrappedAEK: WrappedAEK }> {
-  const rawAEK = await unsealMessage(
-    ephemeralPrivateKey,
-    sealedAEK.ciphertext,
-    sealedAEK.iv,
-    sealedAEK.ephemeralPublicKey
-  )
-  // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
-  // way to zero them, but they are consumed immediately by digest() and importAesKey().
+    sealedAEK: SealedAEK,
+    ephemeralPrivateKey: CryptoKey,
+    passphrase: string,
+    secretKey: Uint8Array,
+    aekCommitment: ArrayBuffer
+): Promise<{ wrappedAEK: WrappedAEK }>
+{
+    const rawAEK = await unsealMessage(
+        ephemeralPrivateKey,
+        sealedAEK.ciphertext,
+        sealedAEK.iv,
+        sealedAEK.ephemeralPublicKey
+    );
+    // Raw AEK bytes live briefly in memory here; JavaScript provides no reliable
+    // way to zero them, but they are consumed immediately by digest() and importAesKey().
 
-  const actualCommitment = await digest(rawAEK)
-  if (!buffersEqual(new Uint8Array(actualCommitment), new Uint8Array(aekCommitment))) {
-    throw new Error('finalizeJoin: AEK commitment mismatch — key may have been tampered with')
-  }
+    const actualCommitment = await digest(rawAEK);
+    if (!buffersEqual(new Uint8Array(actualCommitment), new Uint8Array(aekCommitment)))
+    {
+        throw new Error('finalizeJoin: AEK commitment mismatch — key may have been tampered with');
+    }
 
-  const aek = await importAesKey(rawAEK, true) // extractable: true for wrapKey
-  const { wrappedKey, salt } = await wrapKey(passphrase, aek, secretKey)
-  return { wrappedAEK: { wrappedKey, salt } }
+    const aek = await importAesKey(rawAEK, true); // extractable: true for wrapKey
+    const { wrappedKey, salt } = await wrapKey(passphrase, aek, secretKey);
+    return { wrappedAEK: { wrappedKey, salt } };
 }

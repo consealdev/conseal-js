@@ -16,74 +16,90 @@
  * XSS is the responsibility of the application, not this module.
  */
 
-const DB_NAME = 'conseal-keys'
-const STORE = 'keys'
-const VERSION = 1
+const DB_NAME = 'conseal-keys';
+const STORE = 'keys';
+const VERSION = 1;
 
 /** The IndexedDB key id under which the Account Encryption Key is stored after init(). */
-export const AEK_KEY_ID = 'aek'
+export const AEK_KEY_ID = 'aek';
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, VERSION)
-    req.onupgradeneeded = () => {
-      try {
-        req.result.createObjectStore(STORE)
-      } catch (e) {
-        req.result.close()
-        reject(e)
-      }
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
+function openDb(): Promise<IDBDatabase>
+{
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, VERSION);
+        req.onupgradeneeded = () => {
+            try
+            {
+                req.result.createObjectStore(STORE);
+            }
+            catch (e)
+            {
+                req.result.close();
+                reject(e);
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
 }
 
 /** Persists a CryptoKey to IndexedDB under the given name. Overwrites if name exists. */
-export async function saveCryptoKey(name: string, key: CryptoKey): Promise<void> {
-  const db = await openDb()
-  try {
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).put(key, name)
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error)
-    })
-  } finally {
-    db.close()
-  }
+export async function saveCryptoKey(name: string, key: CryptoKey): Promise<void>
+{
+    const db = await openDb();
+    try
+    {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).put(key, name);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    finally
+    {
+        db.close();
+    }
 }
 
 /** Loads a CryptoKey from IndexedDB. Returns null if the name is not found. */
-export async function loadCryptoKey(name: string): Promise<CryptoKey | null> {
-  const db = await openDb()
-  try {
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly')
-      const req = tx.objectStore(STORE).get(name)
-      let result: CryptoKey | null = null
-      req.onsuccess = () => {
-        result = (req.result as CryptoKey | undefined) ?? null
-      }
-      tx.oncomplete = () => resolve(result)
-      tx.onerror = () => reject(tx.error)
-    })
-  } finally {
-    db.close()
-  }
+export async function loadCryptoKey(name: string): Promise<CryptoKey | null>
+{
+    const db = await openDb();
+    try
+    {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readonly');
+            const req = tx.objectStore(STORE).get(name);
+            let result: CryptoKey | null = null;
+            req.onsuccess = () => {
+                result = (req.result as CryptoKey | undefined) ?? null;
+            };
+            tx.oncomplete = () => resolve(result);
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    finally
+    {
+        db.close();
+    }
 }
 
 /** Removes a CryptoKey from IndexedDB. No-op if the name does not exist. */
-export async function deleteCryptoKey(name: string): Promise<void> {
-  const db = await openDb()
-  try {
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).delete(name)
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error)
-    })
-  } finally {
-    db.close()
-  }
+export async function deleteCryptoKey(name: string): Promise<void>
+{
+    const db = await openDb();
+    try
+    {
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).delete(name);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    finally
+    {
+        db.close();
+    }
 }

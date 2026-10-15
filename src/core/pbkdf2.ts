@@ -34,32 +34,34 @@
  * consistently across Chromium, Firefox, and WebKit.
  */
 
-import { combinePassphraseAndSecretKey } from './secret-key.js'
-import { buffersEqual } from './compare.js'
+import { combinePassphraseAndSecretKey } from './secret-key.js';
+import { buffersEqual } from './compare.js';
 
-const ITERATIONS = 600_000
-const SALT_LENGTH = 16 // 128-bit salt
-const IV_LENGTH = 12   // 96-bit IV for AES-GCM
+const ITERATIONS = 600_000;
+const SALT_LENGTH = 16; // 128-bit salt
+const IV_LENGTH = 12;   // 96-bit IV for AES-GCM
 
-async function deriveWrappingKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(passphrase),
-    'PBKDF2',
-    false,
-    ['deriveKey']
-  )
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: salt as BufferSource, iterations: ITERATIONS, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  )
+async function deriveWrappingKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey>
+{
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(passphrase),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+    );
+    return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: salt as BufferSource, iterations: ITERATIONS, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
 }
 
-async function resolvePassphrase(passphrase: string, secretKey?: Uint8Array): Promise<string> {
-  return secretKey ? combinePassphraseAndSecretKey(passphrase, secretKey) : passphrase
+async function resolvePassphrase(passphrase: string, secretKey?: Uint8Array): Promise<string>
+{
+    return secretKey ? combinePassphraseAndSecretKey(passphrase, secretKey) : passphrase;
 }
 
 /**
@@ -68,39 +70,42 @@ async function resolvePassphrase(passphrase: string, secretKey?: Uint8Array): Pr
  * AES-GCM authentication throws on wrong credentials across all engines.
  */
 async function decryptWrappedKey(
-  wrappingKey: CryptoKey,
-  wrappedKey: ArrayBuffer,
-  extractable: boolean
-): Promise<CryptoKey> {
-  const bytes = new Uint8Array(wrappedKey)
-  const iv = bytes.slice(0, IV_LENGTH)
-  const ciphertext = bytes.slice(IV_LENGTH)
-  const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, wrappingKey, ciphertext)
-  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM', length: 256 }, extractable, ['encrypt', 'decrypt'])
+    wrappingKey: CryptoKey,
+    wrappedKey: ArrayBuffer,
+    extractable: boolean
+): Promise<CryptoKey>
+{
+    const bytes = new Uint8Array(wrappedKey);
+    const iv = bytes.slice(0, IV_LENGTH);
+    const ciphertext = bytes.slice(IV_LENGTH);
+    const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, wrappingKey, ciphertext);
+    return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM', length: 256 }, extractable, ['encrypt', 'decrypt']);
 }
 
 /** Wraps a CryptoKey with a passphrase (and optional Secret Key). The input key must have extractable: true. */
 export async function wrapKey(
-  passphrase: string,
-  key: CryptoKey,
-  secretKey?: Uint8Array
-): Promise<{ wrappedKey: ArrayBuffer; salt: Uint8Array }> {
-  if (!key.extractable) {
-    throw new Error('wrapKey: key must be extractable (extractable: true)')
-  }
-  const effective = await resolvePassphrase(passphrase, secretKey)
-  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH))
-  const wrappingKey = await deriveWrappingKey(effective, salt)
-  const raw = await crypto.subtle.exportKey('raw', key)
-  // Raw key bytes live briefly in memory here; JavaScript provides no reliable
-  // way to zero them, but they are consumed immediately by encrypt() and never returned.
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH))
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrappingKey, raw)
-  // Prepend the IV so unwrapKey needs no extra parameter
-  const wrapped = new Uint8Array(IV_LENGTH + ciphertext.byteLength)
-  wrapped.set(iv, 0)
-  wrapped.set(new Uint8Array(ciphertext), IV_LENGTH)
-  return { wrappedKey: wrapped.buffer.slice(wrapped.byteOffset, wrapped.byteOffset + wrapped.byteLength), salt }
+    passphrase: string,
+    key: CryptoKey,
+    secretKey?: Uint8Array
+): Promise<{ wrappedKey: ArrayBuffer; salt: Uint8Array }>
+{
+    if (!key.extractable)
+    {
+        throw new Error('wrapKey: key must be extractable (extractable: true)');
+    }
+    const effective = await resolvePassphrase(passphrase, secretKey);
+    const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+    const wrappingKey = await deriveWrappingKey(effective, salt);
+    const raw = await crypto.subtle.exportKey('raw', key);
+    // Raw key bytes live briefly in memory here; JavaScript provides no reliable
+    // way to zero them, but they are consumed immediately by encrypt() and never returned.
+    const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrappingKey, raw);
+    // Prepend the IV so unwrapKey needs no extra parameter
+    const wrapped = new Uint8Array(IV_LENGTH + ciphertext.byteLength);
+    wrapped.set(iv, 0);
+    wrapped.set(new Uint8Array(ciphertext), IV_LENGTH);
+    return { wrappedKey: wrapped.buffer.slice(wrapped.byteOffset, wrapped.byteOffset + wrapped.byteLength), salt };
 }
 
 /**
@@ -109,15 +114,16 @@ export async function wrapKey(
  * (e.g. circle join ceremony) — export and discard as quickly as possible.
  */
 export async function unwrapKey(
-  passphrase: string,
-  wrappedKey: ArrayBuffer,
-  salt: Uint8Array,
-  secretKey?: Uint8Array,
-  extractable = false
-): Promise<CryptoKey> {
-  const effective = await resolvePassphrase(passphrase, secretKey)
-  const wrappingKey = await deriveWrappingKey(effective, salt)
-  return decryptWrappedKey(wrappingKey, wrappedKey, extractable)
+    passphrase: string,
+    wrappedKey: ArrayBuffer,
+    salt: Uint8Array,
+    secretKey?: Uint8Array,
+    extractable = false
+): Promise<CryptoKey>
+{
+    const effective = await resolvePassphrase(passphrase, secretKey);
+    const wrappingKey = await deriveWrappingKey(effective, salt);
+    return decryptWrappedKey(wrappingKey, wrappedKey, extractable);
 }
 
 /**
@@ -125,16 +131,17 @@ export async function unwrapKey(
  * The Secret Key (if any) stays the same — it is used on both the unwrap and re-wrap sides.
  */
 export async function rekey(
-  oldPassphrase: string,
-  newPassphrase: string,
-  wrappedKey: ArrayBuffer,
-  salt: Uint8Array,
-  secretKey?: Uint8Array
-): Promise<{ wrappedKey: ArrayBuffer; salt: Uint8Array }> {
-  const effectiveOld = await resolvePassphrase(oldPassphrase, secretKey)
-  const oldWrappingKey = await deriveWrappingKey(effectiveOld, salt)
-  const aek = await decryptWrappedKey(oldWrappingKey, wrappedKey, true)
-  return wrapKey(newPassphrase, aek, secretKey)
+    oldPassphrase: string,
+    newPassphrase: string,
+    wrappedKey: ArrayBuffer,
+    salt: Uint8Array,
+    secretKey?: Uint8Array
+): Promise<{ wrappedKey: ArrayBuffer; salt: Uint8Array }>
+{
+    const effectiveOld = await resolvePassphrase(oldPassphrase, secretKey);
+    const oldWrappingKey = await deriveWrappingKey(effectiveOld, salt);
+    const aek = await decryptWrappedKey(oldWrappingKey, wrappedKey, true);
+    return wrapKey(newPassphrase, aek, secretKey);
 }
 
 /**
@@ -149,17 +156,19 @@ export async function rekey(
  * @param salt         - the salt used when the AEK was wrapped
  */
 export async function rekeySecretKey(
-  passphrase: string,
-  oldSecretKey: Uint8Array,
-  newSecretKey: Uint8Array,
-  wrappedKey: ArrayBuffer,
-  salt: Uint8Array
-): Promise<{ wrappedKey: ArrayBuffer; salt: Uint8Array }> {
-  if (buffersEqual(oldSecretKey, newSecretKey)) {
-    throw new Error('rekeySecretKey: oldSecretKey and newSecretKey must be different')
-  }
-  const effectiveOld = await resolvePassphrase(passphrase, oldSecretKey)
-  const oldWrappingKey = await deriveWrappingKey(effectiveOld, salt)
-  const aek = await decryptWrappedKey(oldWrappingKey, wrappedKey, true)
-  return wrapKey(passphrase, aek, newSecretKey)
+    passphrase: string,
+    oldSecretKey: Uint8Array,
+    newSecretKey: Uint8Array,
+    wrappedKey: ArrayBuffer,
+    salt: Uint8Array
+): Promise<{ wrappedKey: ArrayBuffer; salt: Uint8Array }>
+{
+    if (buffersEqual(oldSecretKey, newSecretKey))
+    {
+        throw new Error('rekeySecretKey: oldSecretKey and newSecretKey must be different');
+    }
+    const effectiveOld = await resolvePassphrase(passphrase, oldSecretKey);
+    const oldWrappingKey = await deriveWrappingKey(effectiveOld, salt);
+    const aek = await decryptWrappedKey(oldWrappingKey, wrappedKey, true);
+    return wrapKey(passphrase, aek, newSecretKey);
 }

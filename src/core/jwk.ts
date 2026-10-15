@@ -14,22 +14,24 @@
  */
 
 /** Serialises a public CryptoKey to a JSON Web Key object. */
-export async function exportPublicKeyAsJwk(key: CryptoKey): Promise<JsonWebKey> {
-  return crypto.subtle.exportKey('jwk', key)
+export async function exportPublicKeyAsJwk(key: CryptoKey): Promise<JsonWebKey>
+{
+    return crypto.subtle.exportKey('jwk', key);
 }
 
 /** Deserialises a JSON Web Key to a CryptoKey for the given algorithm. */
 export async function importPublicKeyFromJwk(
-  jwk: JsonWebKey,
-  algorithm: 'ECDH' | 'ECDSA'
-): Promise<CryptoKey> {
-  const algorithmParams =
-    algorithm === 'ECDH'
-      ? { name: 'ECDH', namedCurve: 'P-256' }
-      : { name: 'ECDSA', namedCurve: 'P-256' }
+    jwk: JsonWebKey,
+    algorithm: 'ECDH' | 'ECDSA'
+): Promise<CryptoKey>
+{
+    const algorithmParams =
+        algorithm === 'ECDH'
+            ? { name: 'ECDH', namedCurve: 'P-256' }
+            : { name: 'ECDSA', namedCurve: 'P-256' };
 
-  // ECDSA public keys need 'verify'; ECDH public keys need no usages (deriveBits is on the private key)
-  const usages: KeyUsage[] = algorithm === 'ECDSA' ? ['verify'] : []
+    // ECDSA public keys need 'verify'; ECDH public keys need no usages (deriveBits is on the private key)
+    const usages: KeyUsage[] = algorithm === 'ECDSA' ? ['verify'] : [];
 
-  return crypto.subtle.importKey('jwk', jwk, algorithmParams, true, usages)
+    return crypto.subtle.importKey('jwk', jwk, algorithmParams, true, usages);
 }

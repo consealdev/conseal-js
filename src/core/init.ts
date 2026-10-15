@@ -13,11 +13,11 @@
  * the user as a key file (Option B) before calling init().
  */
 
-import { unwrapKey } from './pbkdf2.js'
-import { saveCryptoKey, AEK_KEY_ID } from './storage.js'
+import { unwrapKey } from './pbkdf2.js';
+import { saveCryptoKey, AEK_KEY_ID } from './storage.js';
 
 /** The IndexedDB key id under which the AEK is stored after init(). Re-exported from storage. */
-export { AEK_KEY_ID }
+export { AEK_KEY_ID };
 
 /**
  * Unwraps the AEK with the given passphrase (and optional Secret Key) and
@@ -25,11 +25,12 @@ export { AEK_KEY_ID }
  * loadCryptoKey(AEK_KEY_ID).
  */
 export async function init(
-  wrappedKey: ArrayBuffer,
-  salt: Uint8Array,
-  passphrase: string,
-  secretKey?: Uint8Array
-): Promise<void> {
-  const aek = await unwrapKey(passphrase, wrappedKey, salt, secretKey)
-  await saveCryptoKey(AEK_KEY_ID, aek)
+    wrappedKey: ArrayBuffer,
+    salt: Uint8Array,
+    passphrase: string,
+    secretKey?: Uint8Array
+): Promise<void>
+{
+    const aek = await unwrapKey(passphrase, wrappedKey, salt, secretKey);
+    await saveCryptoKey(AEK_KEY_ID, aek);
 }
