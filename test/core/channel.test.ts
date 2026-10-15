@@ -216,7 +216,7 @@ describe('createChannelJoinRequest', () => {
     it('gives a code unlike the circle\'s for the same ephemeral key', async () => {
         const channel = await createChannel(await circleKey());
         const { request, verificationCode } = await createChannelJoinRequest(channel.channelId, channel.aekCommitment);
-        expect(await deriveVerificationCode(request.ephemeralPublicKey)).not.toBe(verificationCode);
+        expect(await deriveVerificationCode(request.ephemeralPublicKey, channel.aekCommitment)).not.toBe(verificationCode);
     });
 
     it('throws a TypeError for a commitment that is not 32 bytes', async () => {
@@ -394,7 +394,7 @@ describe('channels across circles', () => {
 
         // Afterwards, Bob's laptop joins Bob's circle, through the circle's own ceremony.
         const laptopSecretKey = crypto.getRandomValues(new Uint8Array(16));
-        const { request, ephemeralPrivateKey } = await createJoinRequest({ name: 'Laptop' });
+        const { request, ephemeralPrivateKey } = await createJoinRequest(bob.aekCommitment, { name: 'Laptop' });
         const sealedAEK = await authorizeJoin(request, bob.wrappedAEK, PASSPHRASE, bob.secretKey, Date.now());
         const { wrappedAEK } = await finalizeJoin(sealedAEK, ephemeralPrivateKey, PASSPHRASE, laptopSecretKey, bob.aekCommitment);
         const laptopCircleAEK = await unwrapKey(PASSPHRASE, wrappedAEK.wrappedKey, wrappedAEK.salt, laptopSecretKey);

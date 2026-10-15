@@ -10,6 +10,7 @@ import {
     type WrappedAEK,
 } from '../../src/core/circle.js';
 import { importPublicKeyFromJwk } from '../../src/core/jwk.js';
+import { sealMessage } from '../../src/core/ecdh.js';
 import { digest } from '../../src/core/digest.js';
 import { generateMnemonic, recoverWithMnemonic } from '../../src/core/mnemonic.js';
 import {
@@ -34,6 +35,12 @@ function makeMnemonic(): string
     return generateMnemonic();
 }
 
+/** A commitment for a join request outside any circle. */
+function makeCommitment(): Uint8Array
+{
+    return crypto.getRandomValues(new Uint8Array(32));
+}
+
 // ---------- deriveVerificationCode ----------
 
 describe('formatVerificationCode', () => {
@@ -55,38 +62,58 @@ describe('formatVerificationCode', () => {
 
 describe('deriveVerificationCode', () => {
     it('returns 16 base32 characters in groups of four', async () => {
-        const { request } = await createJoinRequest();
-        const code = await deriveVerificationCode(request.ephemeralPublicKey);
+        const commitment = makeCommitment();
+        const { request } = await createJoinRequest(commitment);
+        const code = await deriveVerificationCode(request.ephemeralPublicKey, commitment);
         expect(code).toMatch(CODE);
     });
 
-    it('formats the SHA-256 of the key\'s uncompressed point', async () => {
-        const { request } = await createJoinRequest();
+    it('formats the SHA-256 of the label, the commitment and the key\'s uncompressed point', async () => {
+        const commitment = makeCommitment();
+        const { request } = await createJoinRequest(commitment);
         const key = await importPublicKeyFromJwk(request.ephemeralPublicKey, 'ECDH');
-        const point = await crypto.subtle.exportKey('raw', key);
+        const point = new Uint8Array(await crypto.subtle.exportKey('raw', key));
+        const label = new TextEncoder().encode('conseal-circle-join:v1');
+        const input = new Uint8Array([...label, ...commitment, ...point]);
+
         expect(point.byteLength).toBe(65);
-        expect(await deriveVerificationCode(request.ephemeralPublicKey)).toBe(formatVerificationCode(await digest(point)));
+        expect(await deriveVerificationCode(request.ephemeralPublicKey, commitment)).toBe(formatVerificationCode(await digest(input)));
     });
 
-    it('returns the same code for the same JWK', async () => {
-        const { request } = await createJoinRequest();
-        const code1 = await deriveVerificationCode(request.ephemeralPublicKey);
-        const code2 = await deriveVerificationCode(request.ephemeralPublicKey);
+    it('returns the same code for the same JWK and commitment', async () => {
+        const commitment = makeCommitment();
+        const { request } = await createJoinRequest(commitment);
+        const code1 = await deriveVerificationCode(request.ephemeralPublicKey, commitment);
+        const code2 = await deriveVerificationCode(request.ephemeralPublicKey, commitment.buffer as ArrayBuffer);
         expect(code1).toBe(code2);
     });
 
     it('returns different codes for different key pairs', async () => {
-        const { request: req1 } = await createJoinRequest();
-        const { request: req2 } = await createJoinRequest();
-        const code1 = await deriveVerificationCode(req1.ephemeralPublicKey);
-        const code2 = await deriveVerificationCode(req2.ephemeralPublicKey);
+        const commitment = makeCommitment();
+        const { request: req1 } = await createJoinRequest(commitment);
+        const { request: req2 } = await createJoinRequest(commitment);
+        const code1 = await deriveVerificationCode(req1.ephemeralPublicKey, commitment);
+        const code2 = await deriveVerificationCode(req2.ephemeralPublicKey, commitment);
+        expect(code1).not.toBe(code2);
+    });
+
+    it('returns different codes for different commitments', async () => {
+        const { request } = await createJoinRequest(makeCommitment());
+        const code1 = await deriveVerificationCode(request.ephemeralPublicKey, makeCommitment());
+        const code2 = await deriveVerificationCode(request.ephemeralPublicKey, makeCommitment());
         expect(code1).not.toBe(code2);
     });
 
     it('matches the code returned by createJoinRequest', async () => {
-        const { request, verificationCode } = await createJoinRequest();
-        const derived = await deriveVerificationCode(request.ephemeralPublicKey);
+        const commitment = makeCommitment();
+        const { request, verificationCode } = await createJoinRequest(commitment);
+        const derived = await deriveVerificationCode(request.ephemeralPublicKey, commitment);
         expect(derived).toBe(verificationCode);
+    });
+
+    it('throws a TypeError for a commitment that is not 32 bytes', async () => {
+        const { request } = await createJoinRequest(makeCommitment());
+        await expect(deriveVerificationCode(request.ephemeralPublicKey, makeCommitment().slice(0, 31))).rejects.toThrow(TypeError);
     });
 });
 
@@ -191,7 +218,7 @@ describe('initCircle', () => {
 
 describe('createJoinRequest', () => {
     it('returns a request with deviceId, ephemeralPublicKey, createdAt', async () => {
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
         expect(request.deviceId).toMatch(
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
         );
@@ -202,30 +229,34 @@ describe('createJoinRequest', () => {
     });
 
     it('includes deviceMeta when provided', async () => {
-        const { request } = await createJoinRequest({ name: 'iPhone 15', platform: 'ios' });
+        const { request } = await createJoinRequest(makeCommitment(), { name: 'iPhone 15', platform: 'ios' });
         expect(request.deviceMeta).toEqual({ name: 'iPhone 15', platform: 'ios' });
     });
 
     it('omits deviceMeta when not provided', async () => {
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
         expect(request.deviceMeta).toBeUndefined();
     });
 
     it('returns an ephemeral private key CryptoKey', async () => {
-        const { ephemeralPrivateKey } = await createJoinRequest();
+        const { ephemeralPrivateKey } = await createJoinRequest(makeCommitment());
         expect(ephemeralPrivateKey.type).toBe('private');
         expect(ephemeralPrivateKey.algorithm.name).toBe('ECDH');
     });
 
     it('returns a verification code of 16 base32 characters in groups of four', async () => {
-        const { verificationCode } = await createJoinRequest();
+        const { verificationCode } = await createJoinRequest(makeCommitment());
         expect(verificationCode).toMatch(CODE);
     });
 
     it('generates a unique deviceId on each call', async () => {
-        const { request: r1 } = await createJoinRequest();
-        const { request: r2 } = await createJoinRequest();
+        const { request: r1 } = await createJoinRequest(makeCommitment());
+        const { request: r2 } = await createJoinRequest(makeCommitment());
         expect(r1.deviceId).not.toBe(r2.deviceId);
+    });
+
+    it('throws a TypeError for a commitment that is not 32 bytes', async () => {
+        await expect(createJoinRequest(makeCommitment().slice(0, 31))).rejects.toThrow(TypeError);
     });
 });
 
@@ -235,7 +266,7 @@ describe('authorizeJoin', () => {
     it('returns a SealedAEK with ciphertext, iv, ephemeralPublicKey', async () => {
         const sk = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'passphrase', sk);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
 
         const sealed = await authorizeJoin(request, wrappedAEK, 'passphrase', sk, Date.now());
         expect(sealed.ciphertext).toBeInstanceOf(ArrayBuffer);
@@ -247,7 +278,7 @@ describe('authorizeJoin', () => {
     it('throws when the join request is older than 5 minutes', async () => {
         const sk = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'passphrase', sk);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
         const staleServerReceivedAt = Date.now() - 6 * 60 * 1000;
 
         await expect(authorizeJoin(request, wrappedAEK, 'passphrase', sk, staleServerReceivedAt)).rejects.toThrow(
@@ -258,7 +289,7 @@ describe('authorizeJoin', () => {
     it('throws on wrong passphrase', async () => {
         const sk = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'correct', sk);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
 
         await expect(authorizeJoin(request, wrappedAEK, 'wrong', sk, Date.now())).rejects.toThrow();
     });
@@ -267,7 +298,7 @@ describe('authorizeJoin', () => {
         const sk1 = makeSecretKey();
         const sk2 = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'passphrase', sk1);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
 
         await expect(authorizeJoin(request, wrappedAEK, 'passphrase', sk2, Date.now())).rejects.toThrow();
     });
@@ -275,7 +306,7 @@ describe('authorizeJoin', () => {
     it('accepts a request received just under the 5-minute TTL (4m59s)', async () => {
         const sk = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'passphrase', sk);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
         // 4 minutes 59 seconds ago — well within the 5-minute window
         const serverReceivedAt = Date.now() - (4 * 60 * 1000 + 59 * 1000);
         const sealed = await authorizeJoin(request, wrappedAEK, 'passphrase', sk, serverReceivedAt);
@@ -285,7 +316,7 @@ describe('authorizeJoin', () => {
     it('accepts a request received at exactly the TTL boundary (age == TTL_MS is not > TTL_MS)', async () => {
         const sk = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'passphrase', sk);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
         // 100 ms under the limit ensures we stay on the accepted side of the strict > check
         const serverReceivedAt = Date.now() - (5 * 60 * 1000 - 100);
         const sealed = await authorizeJoin(request, wrappedAEK, 'passphrase', sk, serverReceivedAt);
@@ -295,7 +326,7 @@ describe('authorizeJoin', () => {
     it('throws when request age is just over the TTL (5m + 100ms)', async () => {
         const sk = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'passphrase', sk);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(makeCommitment());
         const serverReceivedAt = Date.now() - (5 * 60 * 1000 + 100);
         await expect(authorizeJoin(request, wrappedAEK, 'passphrase', sk, serverReceivedAt)).rejects.toThrow(/expired/);
     });
@@ -307,7 +338,7 @@ describe('finalizeJoin', () => {
     it('returns a wrappedAEK that can be unwrapped', async () => {
         const sk1 = makeSecretKey();
         const { wrappedAEK, aekCommitment } = await initCircle(makeMnemonic(), 'passphrase1', sk1);
-        const { request, ephemeralPrivateKey } = await createJoinRequest();
+        const { request, ephemeralPrivateKey } = await createJoinRequest(aekCommitment);
         const sealedAEK = await authorizeJoin(request, wrappedAEK, 'passphrase1', sk1, Date.now());
 
         const sk2 = makeSecretKey();
@@ -326,7 +357,7 @@ describe('finalizeJoin', () => {
     it('throws when aekCommitment does not match (tampered SealedAEK)', async () => {
         const sk1 = makeSecretKey();
         const { wrappedAEK } = await initCircle(makeMnemonic(), 'passphrase1', sk1);
-        const { request, ephemeralPrivateKey } = await createJoinRequest();
+        const { request, ephemeralPrivateKey } = await createJoinRequest(makeCommitment());
         const sealedAEK = await authorizeJoin(request, wrappedAEK, 'passphrase1', sk1, Date.now());
 
         const wrongCommitment = crypto.getRandomValues(new Uint8Array(32)).buffer as ArrayBuffer;
@@ -340,10 +371,10 @@ describe('finalizeJoin', () => {
     it('throws when decrypting with the wrong private key', async () => {
         const sk1 = makeSecretKey();
         const { wrappedAEK, aekCommitment } = await initCircle(makeMnemonic(), 'passphrase1', sk1);
-        const { request } = await createJoinRequest();
+        const { request } = await createJoinRequest(aekCommitment);
         const sealedAEK = await authorizeJoin(request, wrappedAEK, 'passphrase1', sk1, Date.now());
 
-        const { ephemeralPrivateKey: wrongKey } = await createJoinRequest();
+        const { ephemeralPrivateKey: wrongKey } = await createJoinRequest(makeCommitment());
         const sk2 = makeSecretKey();
         await expect(
             finalizeJoin(sealedAEK, wrongKey, 'passphrase2', sk2, aekCommitment)
@@ -365,13 +396,13 @@ describe('full ceremony', () => {
         const { wrappedAEK: foundingWrappedAEK, aekCommitment } = await initCircle(mnemonic, passphrase1, sk1);
 
         // New device initiates the join
-        const { request, ephemeralPrivateKey, verificationCode } = await createJoinRequest({
+        const { request, ephemeralPrivateKey, verificationCode } = await createJoinRequest(aekCommitment, {
             name: 'Laptop',
             platform: 'web',
         });
 
-        // Trusted device derives the same code from the request and confirms it matches
-        const codeFromRequest = await deriveVerificationCode(request.ephemeralPublicKey);
+        // Trusted device derives the same code from the request and its own commitment, and confirms it matches
+        const codeFromRequest = await deriveVerificationCode(request.ephemeralPublicKey, aekCommitment);
         expect(codeFromRequest).toBe(verificationCode);
 
         // Trusted device authorizes (after out-of-band code confirmation)
@@ -405,12 +436,12 @@ describe('full ceremony', () => {
         const { wrappedAEK: w1, aekCommitment } = await initCircle(mnemonic, 'p1', sk1);
 
         // Device 2 joins via device 1
-        const { request: req2, ephemeralPrivateKey: esk2 } = await createJoinRequest();
+        const { request: req2, ephemeralPrivateKey: esk2 } = await createJoinRequest(aekCommitment);
         const sealed2 = await authorizeJoin(req2, w1, 'p1', sk1, Date.now());
         const { wrappedAEK: w2 } = await finalizeJoin(sealed2, esk2, 'p2', sk2, aekCommitment);
 
         // Device 3 joins via device 2 (any trusted device can authorize)
-        const { request: req3, ephemeralPrivateKey: esk3 } = await createJoinRequest();
+        const { request: req3, ephemeralPrivateKey: esk3 } = await createJoinRequest(aekCommitment);
         const sealed3 = await authorizeJoin(req3, w2, 'p2', sk2, Date.now());
         const { wrappedAEK: w3 } = await finalizeJoin(sealed3, esk3, 'p3', sk3, aekCommitment);
 
@@ -423,6 +454,35 @@ describe('full ceremony', () => {
         const [r1, r2, r3] = await Promise.all([raw(w1, 'p1', sk1), raw(w2, 'p2', sk2), raw(w3, 'p3', sk3)]);
         expect(r1).toEqual(r2);
         expect(r1).toEqual(r3);
+    });
+});
+
+// ---------- A server that relays the join ----------
+
+describe('a server that substitutes keys during a join', () => {
+    it('gives the joining device another key\'s commitment, which changes its code', async () => {
+        const sk = makeSecretKey();
+        const { aekCommitment } = await initCircle(makeMnemonic(), 'passphrase', sk);
+        const serverAEK = crypto.getRandomValues(new Uint8Array(32));
+        const serverCommitment = await digest(serverAEK);
+        const { request, ephemeralPrivateKey, verificationCode } = await createJoinRequest(serverCommitment);
+
+        // The trusted device derives the code from its own commitment, so the user sees two codes that differ.
+        expect(await deriveVerificationCode(request.ephemeralPublicKey, aekCommitment)).not.toBe(verificationCode);
+
+        // That comparison is the defence: the server's own key, sealed to the request, passes finalizeJoin.
+        const recipient = await importPublicKeyFromJwk(request.ephemeralPublicKey, 'ECDH');
+        const sealed = await sealMessage(recipient, serverAEK.buffer as ArrayBuffer);
+        await expect(finalizeJoin(sealed, ephemeralPrivateKey, 'p2', makeSecretKey(), serverCommitment)).resolves.toBeDefined();
+    });
+
+    it('puts a key of its own in the request, which changes the trusted device\'s code', async () => {
+        const sk = makeSecretKey();
+        const { aekCommitment } = await initCircle(makeMnemonic(), 'passphrase', sk);
+        const { verificationCode } = await createJoinRequest(aekCommitment);
+        const { request: serverRequest } = await createJoinRequest(aekCommitment);
+
+        expect(await deriveVerificationCode(serverRequest.ephemeralPublicKey, aekCommitment)).not.toBe(verificationCode);
     });
 });
 

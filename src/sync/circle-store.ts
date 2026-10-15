@@ -4,9 +4,10 @@
  * - `deviceId`: this device's id in the circle
  * - `secretKey`: its Secret Key, as raw bytes
  * - `wrappedAek`: its wrapped AEK, encoded (see `EncodedWrappedAek`)
+ * - `aekCommitment`: the circle's AEK commitment, base64, as this device took it with the AEK. Its join codes cover it
  * - `aek`: the unlocked AEK, a non-extractable `CryptoKey`, while the device is unlocked
  */
-export type CircleStoreKey = 'deviceId' | 'secretKey' | 'wrappedAek' | 'aek';
+export type CircleStoreKey = 'deviceId' | 'secretKey' | 'wrappedAek' | 'aekCommitment' | 'aek';
 
 /** Where a device keeps its keys for the circle. Values must survive a structured clone. */
 export interface CircleStore

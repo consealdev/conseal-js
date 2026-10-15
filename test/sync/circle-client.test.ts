@@ -152,6 +152,38 @@ describe('CircleClient', () => {
         await expect(session.finish(PASSPHRASE)).rejects.toBeInstanceOf(JoinStateError);
     });
 
+    it('shows the approving device a code from its own commitment, not the server\'s', async () => {
+        const server = new FakeCircleServer();
+        const phone = device(server);
+        await phone.setup(PASSPHRASE);
+        server.commitment = toBase64(crypto.getRandomValues(new Uint8Array(32)));
+
+        const session = await device(server).startJoin();
+        expect((await onlyPendingJoin(phone)).verificationCode).not.toBe(session.verificationCode);
+    });
+
+    it('works out the commitment of a device that didn\'t keep one, at its next unlock', async () => {
+        const server = new FakeCircleServer();
+        const store = new MemoryCircleStore();
+        const phone = device(server, store);
+        await phone.setup(PASSPHRASE);
+        await store.delete('aekCommitment');
+
+        expect(await phone.status()).toBe('locked');
+        await expect(phone.pendingJoins()).rejects.toBeInstanceOf(LockedError);
+
+        await phone.unlock(PASSPHRASE);
+        expect(await phone.status()).toBe('unlocked');
+        const session = await device(server).startJoin();
+        expect((await onlyPendingJoin(phone)).verificationCode).toBe(session.verificationCode);
+    });
+
+    it('refuses to start a join on an account with no circle', async () => {
+        const server = new FakeCircleServer();
+        await expect(device(server).startJoin()).rejects.toBeInstanceOf(CommitmentMismatchError);
+        expect(server.challenges.size).toBe(0);
+    });
+
     it('reports a denied join, which can\'t be finished', async () => {
         const server = new FakeCircleServer();
         const phone = device(server);
@@ -256,15 +288,24 @@ describe('A join the server answers itself', () => {
         return { phone, laptop, session };
     }
 
+    it('shows codes that differ when it gives the joining device the commitment of a key of its own', async () => {
+        const server = new FakeCircleServer();
+        const own = await serverKey();
+        const { phone, session } = await joinThrough(server, { getCommitment: async () => own.commitment });
+
+        expect((await onlyPendingJoin(phone)).verificationCode).not.toBe(session.verificationCode);
+    });
+
     it('refuses a key the server sealed itself, with no passphrase check', async () => {
         const server = new FakeCircleServer();
         const own = await serverKey();
         const { laptop, session } = await joinThrough(server, {
+            getCommitment: async () => own.commitment,
             createJoin: async request =>
             {
-                const { challengeId } = await server.transport().createJoin(request);
-                own.requests.set(challengeId, request.ephemeralPublicKey);
-                return { challengeId, aekCommitment: own.commitment };
+                const answer = await server.transport().createJoin(request);
+                own.requests.set(answer.challengeId, request.ephemeralPublicKey);
+                return answer;
             },
             getJoinStatus: async challengeId => ({ status: 'authorized', sealedAek: await own.sealFor(challengeId) }) as unknown as JoinStatus,
         });
@@ -281,11 +322,12 @@ describe('A join the server answers itself', () => {
         const server = new FakeCircleServer();
         const own = await serverKey();
         const { laptop, session } = await joinThrough(server, {
+            getCommitment: async () => own.commitment,
             createJoin: async request =>
             {
-                const { challengeId } = await server.transport().createJoin(request);
-                own.requests.set(challengeId, request.ephemeralPublicKey);
-                return { challengeId, aekCommitment: own.commitment };
+                const answer = await server.transport().createJoin(request);
+                own.requests.set(answer.challengeId, request.ephemeralPublicKey);
+                return answer;
             },
             getJoinStatus: async challengeId =>
             {
@@ -309,9 +351,9 @@ describe('A join the server answers itself', () => {
         const { phone, laptop, session } = await joinThrough(server, {
             createJoin: async request =>
             {
-                const { challengeId } = await server.transport().createJoin(request);
-                own.requests.set(challengeId, request.ephemeralPublicKey);
-                return { challengeId, aekCommitment: own.commitment };
+                const answer = await server.transport().createJoin(request);
+                own.requests.set(answer.challengeId, request.ephemeralPublicKey);
+                return answer;
             },
             getJoinStatus: async challengeId =>
             {
