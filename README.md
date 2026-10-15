@@ -223,6 +223,10 @@ WebKit is the highest-value target: every browser on iOS uses WebKit under the h
 
 Both suites run automatically on CI for every push and pull request to `main`.
 
+## Issues
+
+Report bugs and request features at [github.com/consealdev/conseal/issues](https://github.com/consealdev/conseal/issues), the one tracker for conseal-js, conseal-dotnet and the spec. Pull requests are not accepted.
+
 ## License
 
 Dual-licensed under [AGPL-3.0](LICENSE) and a [commercial license](COMMERCIAL-LICENSE.md).

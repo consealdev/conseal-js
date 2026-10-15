@@ -86,7 +86,7 @@ Upon payment, the licensee receives a perpetual license for the version of `cons
 
 Codesense LLC retains all ownership, copyright, and intellectual property rights in the Software at all times. This license grants rights to use the Software; it does not transfer ownership of any kind.
 
-All modifications to the Software made by the licensee remain the intellectual property of the licensee. Codesense LLC claims no ownership over licensee modifications unless they are voluntarily submitted as contributions under a separate Contributor License Agreement.
+All modifications to the Software made by the licensee remain the intellectual property of the licensee. Codesense LLC claims no ownership over licensee modifications.
 
 All copies, modifications, and distributions of the Software must retain the original copyright notice. Licensees may not remove, alter, or obscure any copyright, trademark, or attribution notices included in the Software.
 
