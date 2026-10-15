@@ -22,8 +22,13 @@ describe('<conseal-phrase>', () => {
 
     it('keeps the phrase out of the page\'s markup', async () => {
         const element = await phrase();
+        const words = new Set(mnemonic.split(' '));
 
-        expect(element.outerHTML).not.to.include(mnemonic.split(' ')[0]);
+        // What the page can read: the light DOM and the attribute values. The tag and attribute names are left out,
+        // since they can't carry the phrase and hold words that may be in it, such as "phrase".
+        expect(element.childNodes.length).to.equal(0);
+        const values = [...element.attributes].flatMap(attribute => attribute.value.split(/[^a-z]+/i));
+        expect(values.filter(value => words.has(value))).to.deep.equal([]);
         expect(element.hasAttribute('mnemonic')).to.equal(false);
     });
 
