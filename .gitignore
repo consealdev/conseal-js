@@ -19,7 +19,7 @@ npm-debug.log*
 .vscode/
 .idea/
 
-# Claude Code — per-machine permission state
+# Per-machine settings
 .claude/settings.local.json
 
 # OS
