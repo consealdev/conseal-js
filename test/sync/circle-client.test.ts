@@ -231,6 +231,45 @@ describe('CircleClient', () => {
         expect(await phone.status()).toBe('unlocked');
     });
 
+    it('derives a key for the app\'s own use that only the passphrase gives, and every device of the circle gets the same', async () => {
+        const server = new FakeCircleServer();
+        const phone = device(server);
+        const laptop = device(server);
+        await phone.setup(PASSPHRASE, { name: 'phone' });
+        const session = await laptop.startJoin({ name: 'laptop' });
+        await phone.approveJoin(await onlyPendingJoin(phone), PASSPHRASE, true);
+        await session.check();
+        await session.finish(PASSPHRASE);
+
+        const onPhone = await phone.deriveKey(PASSPHRASE, 'secrets');
+        const onLaptop = await laptop.deriveKey(PASSPHRASE, 'secrets');
+        expect(onPhone.extractable).toBe(false);
+        expect(await sameKey(onPhone, onLaptop)).toBe(true);
+        expect(await sameKey(onPhone, await phone.deriveKey(PASSPHRASE, 'secrets'))).toBe(true);
+
+        // Another purpose is another key, and the AEK is not the derived key.
+        expect(await sameKey(onPhone, await phone.deriveKey(PASSPHRASE, 'notes'))).toBe(false);
+        expect(await sameKey(onPhone, await phone.aek())).toBe(false);
+    });
+
+    it('derives its key only for the passphrase, locked or not', async () => {
+        const server = new FakeCircleServer();
+        const phone = device(server);
+        await phone.setup(PASSPHRASE);
+
+        await expect(phone.deriveKey('not the passphrase', 'secrets')).rejects.toBeInstanceOf(WrongPassphraseError);
+        await expect(phone.deriveKey(PASSPHRASE, '')).rejects.toBeInstanceOf(TypeError);
+
+        await phone.lock();
+        const key = await phone.deriveKey(PASSPHRASE, 'secrets');
+        expect(key.algorithm.name).toBe('AES-GCM');
+        expect(await phone.status()).toBe('locked');
+    });
+
+    it('sends a device with no keys to join or recover when it is asked for a derived key', async () => {
+        await expect(device(new FakeCircleServer()).deriveKey(PASSPHRASE, 'secrets')).rejects.toBeInstanceOf(DeviceNotRegisteredError);
+    });
+
     it('fetches its wrapped AEK from the server when it lost the local copy', async () => {
         const server = new FakeCircleServer();
         const store = new MemoryCircleStore();

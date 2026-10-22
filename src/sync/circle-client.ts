@@ -149,6 +149,32 @@ export class CircleClient
         await this._store.put('aek', await unwrapAek(passphrase, wrapped, secretKey));
     }
 
+    /**
+     * A key for sealing data of the app's own that only the passphrase opens: the AEK this device keeps unlocked for
+     * syncing can't make it, since a script that uses that key can't read its bytes. The key is derived from the AEK, so
+     * every device of the circle derives the same one from the same passphrase, and a different `purpose` gives an
+     * unrelated key. It is non-extractable and nothing of it is kept: call again, with the passphrase, whenever it's
+     * needed, and let go of it when the user's unlock is over.
+     *
+     * Throws `WrongPassphraseError` when the passphrase doesn't open the key, and `DeviceNotRegisteredError` when the
+     * device has to join or recover instead.
+     */
+    public async deriveKey(passphrase: string, purpose: string): Promise<CryptoKey>
+    {
+        if (purpose === '') throw new TypeError('deriveKey: a purpose is required, so keys for different uses stay apart.');
+        const { secretKey, wrapped } = await this._ownKeys();
+        const aek = await unwrapAek(passphrase, wrapped, secretKey, true);
+        // The AEK is uniformly random, so an empty salt will do; the label gives the domain separation.
+        const material = await crypto.subtle.importKey('raw', await crypto.subtle.exportKey('raw', aek), 'HKDF', false, ['deriveKey']);
+        return crypto.subtle.deriveKey(
+            { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode(`conseal-derived-key-v1:${purpose}`) },
+            material,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt'],
+        );
+    }
+
     /** Forgets the unlocked AEK. The device keeps its keys and unlocks again with its passphrase. */
     public lock(): Promise<void>
     {
