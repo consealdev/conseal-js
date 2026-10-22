@@ -84,7 +84,15 @@ switch (await circle.status())
 
 // Sealing data
 const aek = await circle.aek();
+
+// Sealing data that only the passphrase opens: a key derived from the AEK, the same on every device of the circle
+const key = await circle.deriveKey(passphrase, 'secrets');
 ```
+
+The AEK stays unlocked on a device so that it can sync, and a script that uses it can't read its bytes, so it can't make
+a key for data that should open only with the passphrase. `deriveKey` unwraps the AEK again with the passphrase, derives a
+non-extractable AES-GCM key from it with HKDF-SHA-256 under the `purpose` label, and keeps nothing: ask again when the
+user's unlock begins, and let go of the key when it ends. A different `purpose` gives an unrelated key.
 
 ### Joining a device
 
