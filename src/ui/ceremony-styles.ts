@@ -26,6 +26,8 @@ export const ceremonyStyles = css`
 
     .stack { display: flex; flex-direction: column; gap: 12px; }
     .stack.tight { gap: 4px; }
+    /* Holds a verification code, which sizes itself to this box's width (see .code). */
+    .codebox { container-type: inline-size; }
     .stack.loose { gap: 20px; }
 
     .heading { font-size: 1.25rem; font-weight: 700; }
@@ -80,11 +82,16 @@ export const ceremonyStyles = css`
     .link { padding: 0; font-size: 0.82rem; color: var(--color-primary, #6366f1); background: none; }
     .small { width: auto; padding: 5px 10px; font-size: 0.8rem; }
 
-    /* The verification code: the one line the user must compare, so nothing about it is configurable. */
+    /*
+     * The verification code: the one line the user must compare, so nothing about it is configurable. It stays on one
+     * line, because a code that wraps in the middle is harder to read out. It is 19 characters, about 13.3em wide at this
+     * letter spacing, so its size is the width of its box (.codebox) less its own padding and border, over 13.5, up to 1.5rem.
+     */
     .code {
         padding: 12px;
         font-family: monospace;
-        font-size: 1.5rem;
+        font-size: min(1.5rem, calc((100cqw - 28px) / 13.5));
+        white-space: nowrap;
         font-weight: 700;
         letter-spacing: 0.1em;
         text-align: center;

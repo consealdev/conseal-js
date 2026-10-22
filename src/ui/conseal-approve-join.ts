@@ -77,7 +77,7 @@ export class ConsealApproveJoin extends CircleElement
                     <strong>Platform:</strong> ${platform}<br />
                     <strong>Asked at:</strong> ${new Date(join.receivedAt).toLocaleTimeString()}
                 </div>
-                <div class="stack tight">
+                <div class="stack tight codebox">
                     <div class="hint">The new device should show this code:</div>
                     <div class="code">${join.verificationCode}</div>
                 </div>
