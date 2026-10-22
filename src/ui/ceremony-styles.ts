@@ -39,9 +39,9 @@ export const ceremonyStyles = css`
     .warning {
         padding: 10px 12px;
         font-size: 0.82rem;
-        color: #92400e;
-        background: #fef3c7;
-        border: 1px solid #fbbf24;
+        color: var(--color-notice-text, #92400e);
+        background: var(--color-notice-bg, #fef3c7);
+        border: 1px solid var(--color-notice-border, #fbbf24);
         border-radius: var(--radius-sm, 6px);
     }
 
@@ -74,12 +74,12 @@ export const ceremonyStyles = css`
         cursor: pointer;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .primary { width: 100%; color: #fff; background: var(--color-primary, #6366f1); }
+    .primary { width: 100%; color: var(--color-primary-text, #fff); background: var(--color-primary, #6366f1); }
     .secondary { width: 100%; color: inherit; background: var(--color-border, #e2e8f0); border-color: var(--color-border, #e2e8f0); }
     .secondary:hover:not(:disabled) { background: var(--color-border-hover, #cbd5e1); }
-    .danger { width: 100%; color: #fff; background: var(--color-danger, #ef4444); }
-    .warn { width: 100%; color: #fff; background: var(--color-warning, #ea580c); }
-    .link { padding: 0; font-size: 0.82rem; color: var(--color-primary, #6366f1); background: none; }
+    .danger { width: 100%; color: var(--color-danger-text, #fff); background: var(--color-danger, #ef4444); }
+    .warn { width: 100%; color: var(--color-warning-text, #fff); background: var(--color-warning, #ea580c); }
+    .link { padding: 0; font-size: 0.82rem; color: var(--color-link, var(--color-primary, #6366f1)); background: none; }
     .small { width: auto; padding: 5px 10px; font-size: 0.8rem; }
 
     /*
