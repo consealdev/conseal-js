@@ -30,8 +30,8 @@ export class ConsealDevices extends CircleElement
             padding: 2px 6px;
             font-size: 0.7rem;
             font-weight: 600;
-            color: var(--color-primary, #6366f1);
-            background: #eef2ff;
+            color: var(--color-badge-text, var(--color-primary, #6366f1));
+            background: var(--color-badge-bg, #eef2ff);
             border-radius: 4px;
         }
         .actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
