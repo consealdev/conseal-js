@@ -96,7 +96,7 @@ export class ConsealJoin extends CircleElement
                     <div class="heading">Approve this device</div>
                     <div class="sub">Open ${this.appName} on a device that's already in your circle, and approve this request there.</div>
                 </div>
-                <div class="stack tight">
+                <div class="stack tight codebox">
                     <div class="hint">Check that it shows the same code:</div>
                     <div class="code">${this._code}</div>
                 </div>
