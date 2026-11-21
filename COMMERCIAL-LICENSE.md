@@ -5,7 +5,7 @@ License inquiries: license@conseal.dev
 
 ---
 
-`conseal` is dual-licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) and this Commercial License. This file describes the commercial license.
+`conseal` is dual-licensed under the GNU Affero General Public License, version 3 or any later version (the "AGPL"), and this Commercial License. This file describes the commercial license.
 
 ---
 
@@ -32,9 +32,9 @@ A commercial license is required if you use `conseal` in:
 
 - A proprietary or closed-source application
 - A SaaS product or web service whose source code is not publicly available under a compatible open-source license
-- Any product or service where you cannot comply with the AGPL-3.0 terms
+- Any product or service where you cannot comply with the terms of the AGPL
 
-If your application is fully open source under AGPL-3.0 or a compatible license, you do not need a commercial license.
+If your application is fully open source under the AGPL or a compatible license, you do not need a commercial license.
 
 ### Permitted Use
 
@@ -42,7 +42,7 @@ The Software is licensed for use in Production Apps that protect and sync the li
 
 ### Transitive Dependency
 
-If `conseal` is pulled in as an indirect dependency of another library or framework rather than used directly in your project, the AGPL-3.0 terms apply automatically and no commercial license is required solely on that basis.
+If `conseal` is pulled in as an indirect dependency of another library or framework rather than used directly in your project, the terms of the AGPL apply automatically and no commercial license is required solely on that basis.
 
 This exemption does not apply if the dependency was introduced, created, or controlled by the licensee's organization for the purpose of circumventing license requirements.
 
@@ -68,7 +68,7 @@ Subject to payment of the applicable license fee, Codesense LLC grants the licen
 - Deploy the Software across any number of servers, environments, and infrastructure serving those Production Apps
 - Distribute the Software as a component of those Production Apps
 
-without obligation to publish the licensee's application source code and without the copyleft requirements of the AGPL-3.0.
+without obligation to publish the licensee's application source code and without the copyleft requirements of the AGPL.
 
 A separate license is required for each additional Production App in which the licensee uses the Software in a production environment. Development, staging, and test environments that exist solely to support a licensed Production App are covered under the same license as that Production App and do not require separate licenses.
 
@@ -102,7 +102,7 @@ Licensees agree not to make false statements of fact about `conseal`, Codesense 
 
 ## Data and Privacy
 
-Codesense LLC does not collect, process, or retain any data that the licensee processes through the Software. `conseal` encrypts data on the devices of the licensee's end users, and its sync backend runs on infrastructure the licensee operates. For more information, see the Codesense LLC Privacy Policy at codesense.dev/privacy.
+Codesense LLC does not collect, process, or retain any data that the licensee processes through the Software. `conseal` encrypts data on the devices of the licensee's end users, and its sync backend runs on infrastructure the licensee operates. For more information, see the Codesense LLC Privacy Policy at [my.codesense.dev/privacy](https://my.codesense.dev/privacy).
 
 ---
 
