@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { isBackup, openBackup } from './backup.js';
 import { blobRefs, type BlobRef } from './blob-envelope.js';
 import { isRecordId, type CollectionDefinition } from './collections.js';

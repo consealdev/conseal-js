@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 // The ceremony screens. Importing this entry point registers the elements; it needs `lit`.
 
 export { ConsealApproveJoin } from './conseal-approve-join.js';

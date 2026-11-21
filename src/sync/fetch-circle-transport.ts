@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import type { JoinRequest } from '../core/index.js';
 import type {
     CircleTransport,

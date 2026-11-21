@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 export function isPlainObject(value: unknown): value is object
 {
     return typeof value === 'object' && value !== null && !Array.isArray(value);

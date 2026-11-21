@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /** Why the engine stopped retrying a record's pending change. The next local change to the record clears it. */
 export type RejectionCode =
     /** The server refused the record as malformed (`400`). */

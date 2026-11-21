@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { digest, fromBase64, importPublicKeyFromJwk, sealMessage, toBase64, unsealMessage } from '../core/index.js';
 import { decodeSealed, encodeSealed, toArrayBuffer, type EncodedSealed } from './encoding.js';
 import { UnverifiedKeyError, WrongPassphraseError } from './errors.js';

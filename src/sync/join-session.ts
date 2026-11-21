@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { finalizeJoin, fromBase64, generateSecretKey, type WrappedAEK } from '../core/index.js';
 import type { CircleTransport, JoinStatus } from './circle-transport.js';
 import { decodeSealed, toArrayBuffer } from './encoding.js';

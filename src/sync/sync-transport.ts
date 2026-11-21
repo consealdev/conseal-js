@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /**
  * The wire types of the sync contract, `openapi.yaml` in conseal-sync-spec. Binary fields are standard base64 with
  * padding.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { CircleClient, PendingJoin } from '../sync/circle-client.js';

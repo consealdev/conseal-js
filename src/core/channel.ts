@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later OR Commercial
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
 // Copyright (c) 2026 Codesense
 
 /**
