@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { fromBase64, generateAesKey, importAesKey, seal, toBase64, unseal } from '../core/index.js';
 import { isRecordId, newRecordId } from './collections.js';
 import { toArrayBuffer } from './encoding.js';

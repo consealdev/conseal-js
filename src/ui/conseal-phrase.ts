@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { css, html, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { CeremonyElement } from './ceremony-element.js';

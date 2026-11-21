@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { SyncProtocolError, SyncTransportError } from './errors.js';
 
 /**

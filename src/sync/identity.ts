@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { generateECDHKeyPair, generateECDSAKeyPair, importPublicKeyFromJwk } from '../core/index.js';
 import { KeyringError } from './errors.js';
 import { isPlainObject } from './values.js';

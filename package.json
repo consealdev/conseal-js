@@ -1,7 +1,7 @@
 {
     "name": "@consealdev/conseal",
     "version": "0.0.0",
-    "license": "AGPL-3.0-or-later OR Commercial",
+    "license": "AGPL-3.0-or-later OR LicenseRef-Commercial",
     "homepage": "https://conseal.dev",
     "repository": {
         "type": "git",
@@ -29,7 +29,8 @@
         "./dist/ui/**"
     ],
     "files": [
-        "dist"
+        "dist",
+        "COMMERCIAL-LICENSE.md"
     ],
     "engines": {
         "node": ">=20"

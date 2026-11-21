@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { fromBase64, toBase64, type SealedAEK, type WrappedAEK } from '../core/index.js';
 
 /** A wrapped AEK in a form JSON can carry. Both fields are standard base64. */

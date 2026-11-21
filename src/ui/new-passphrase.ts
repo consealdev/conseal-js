@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { html, nothing, type TemplateResult } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 

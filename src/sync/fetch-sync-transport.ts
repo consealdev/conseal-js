@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { toArrayBuffer } from './encoding.js';
 import { SyncProtocolError, SyncTransportError } from './errors.js';
 import { FetchClient, field, isArray, isBoolean, isObject, isString, type FetchFunction, type FetchTransportOptions } from './fetch-client.js';

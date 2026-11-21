@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 /** Base class for the errors the circle ceremony raises. */
 export class CircleError extends Error
 {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial
+
 import { LitElement, type CSSResultGroup, type PropertyValues } from 'lit';
 import { property } from 'lit/decorators.js';
 import type { CircleClient } from '../sync/circle-client.js';
