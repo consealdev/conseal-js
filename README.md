@@ -1,19 +1,14 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <img src="assets/logo-light.svg" style="width: 4rem; height: 4rem;" alt="Conseal logo">
-  </picture>
-</p>
+# Conseal for JavaScript
 
-<h1 align="center">Conseal</h1>
+The browser side of [Conseal](https://github.com/consealdev/conseal), end-to-end encryption for web apps. It seals data on
+the user's device before it leaves it, shares the user's key between their devices only when they approve a new device on
+one that already holds it, and shares a key between users in channels. It syncs the user's records between their devices,
+and has the circle's screens as Lit components. The server stores and orders ciphertext it can't open.
 
-<p align="center">
-  Zero-knowledge cryptography and private communication.
-</p>
+The server is [Conseal for ASP.NET Core](https://github.com/consealdev/conseal-dotnet), or any backend built to the same
+[contract](https://github.com/consealdev/conseal/tree/main/spec).
 
----
-
-## Install
+## Installation
 
 ```bash
 npm install @consealdev/conseal
@@ -23,210 +18,90 @@ The package has three entry points:
 
 | Import | Holds |
 |---|---|
-| `@consealdev/conseal` | The crypto core: the primitives below, the circle and channels |
-| `@consealdev/conseal/sync` | Encrypted sync across a user's devices: `CircleClient`, `SyncEngine` and their transports. See [docs/sync.md](docs/sync.md) |
-| `@consealdev/conseal/ui` | The circle ceremony's screens, as Lit components. Needs `lit` |
+| `@consealdev/conseal` | The crypto core: sealing, passphrase key wrapping, ECDH and ECDSA, the recovery phrase, and the circle and channels that share keys |
+| `@consealdev/conseal/sync` | `CircleClient`, which joins a device to the user's circle, and `SyncEngine`, which syncs their records between devices, with the transports and stores they use |
+| `@consealdev/conseal/ui` | The circle's screens, as Lit components. Needs `lit` |
 
-## Quick start
+It is ESM only. It runs in browsers and in Node.js 20 or newer, anything with `crypto.subtle`. Key storage needs IndexedDB.
 
-```ts
-import { seal, unseal, generateAesKey } from '@consealdev/conseal'
-
-// Generate a key and encrypt
-const key = await generateAesKey()
-const plaintext = await file.arrayBuffer()
-const { ciphertext, iv } = await seal(key, plaintext)
-
-// Decrypt
-const result = await unseal(key, ciphertext, iv)
-```
-
-## API
-
-### Symmetric encryption (AES-256-GCM)
-
-| Function | Description |
-|---|---|
-| `seal(key, plaintext, additionalData?)` | Encrypts with a random 96-bit IV. Returns `{ ciphertext, iv }`. |
-| `unseal(key, ciphertext, iv, additionalData?)` | Decrypts. Throws on tampered data or AAD mismatch. |
-| `generateAesKey(extractable?)` | Generates a random AES-256 key. |
-| `importAesKey(raw, extractable?)` | Imports raw key bytes as a CryptoKey. |
-
-### Passphrase key wrapping (PBKDF2 + AES-GCM)
-
-| Function | Description |
-|---|---|
-| `wrapKey(passphrase, key, secretKey?)` | Wraps an extractable CryptoKey with a passphrase, and the Secret Key if given. Returns `{ wrappedKey, salt }`; `wrappedKey` is the 12-byte IV followed by the AES-GCM ciphertext. |
-| `unwrapKey(passphrase, wrappedKey, salt, secretKey?, extractable?)` | Unwraps. Throws on a wrong passphrase or Secret Key. |
-| `rekey(oldPass, newPass, wrappedKey, salt, secretKey?)` | Changes passphrase without re-encrypting data. |
-| `rekeySecretKey(passphrase, oldSecretKey, newSecretKey, wrappedKey, salt)` | Rotates a compromised Secret Key, keeping the passphrase. |
-
-### Secret Key
-
-| Function | Description |
-|---|---|
-| `generateSecretKey()` | Generates a random 128-bit Secret Key, a second factor for key wrapping. Store it on the device and keep an offline copy. |
-| `combinePassphraseAndSecretKey(passphrase, secretKey)` | HMAC-SHA-256 of the passphrase, keyed by the Secret Key, as the PBKDF2 input. The wrapping functions call it when given a `secretKey`. |
-
-### Asymmetric encryption (ECDH P-256)
-
-| Function | Description |
-|---|---|
-| `sealMessage(recipientPublicKey, plaintext)` | Encrypts for a recipient using ephemeral ECDH. |
-| `unsealMessage(privateKey, ciphertext, iv, ephemeralPublicKey)` | Decrypts with the recipient's private key. |
-| `generateECDHKeyPair()` | Generates a P-256 ECDH key pair. |
-
-### Digital signatures (ECDSA P-256)
-
-| Function | Description |
-|---|---|
-| `sign(privateKey, data)` | Signs data with ECDSA-SHA256. |
-| `verify(publicKey, signature, data)` | Verifies a signature. Returns `true` or `false`. |
-| `generateECDSAKeyPair()` | Generates a P-256 ECDSA key pair. |
-
-### Envelope encryption (passcode-protected)
-
-| Function | Description |
-|---|---|
-| `sealEnvelope(plaintext, passcode)` | Encrypts for a recipient without a Conseal account. |
-| `unsealEnvelope(envelope, passcode)` | Decrypts with the passcode. |
-| `encodeEnvelope(envelope)` | Serialises a `SealedEnvelope` to JSON. |
-| `decodeEnvelope(json)` | Deserialises JSON back to a `SealedEnvelope`. |
-
-### Multi-device private communication (Circle)
-
-Establishes a bounded group of trusted devices that all hold the same Account Encryption Key (AEK). The mnemonic is the root of trust — the AEK is always derived from it, so any device can recover the AEK from the mnemonic alone if the passphrase or wrapped key is lost.
-
-Account creation flow:
+## Sealing data
 
 ```ts
-const mnemonic = generateMnemonic()          // show to user — write it down, never store it
-const { wrappedAEK, aekCommitment, deviceId } = await initCircle(mnemonic, passphrase, secretKey)
-// store wrappedAEK + aekCommitment server-side
+import { generateAesKey, seal, unseal } from '@consealdev/conseal';
+
+const key = await generateAesKey();
+const { ciphertext, iv } = await seal(key, plaintext);
+
+const opened = await unseal(key, ciphertext, iv);   // throws on a wrong key or altered data
 ```
 
-Recovery flow (lost passphrase or wrapped key):
+The core makes no network calls: the app owns the transport and the storage of every payload.
+
+## Syncing a user's devices
+
+The first device creates the circle, and every record the app saves is sealed before it leaves the device:
 
 ```ts
-const aek = await recoverWithMnemonic(mnemonic, true)  // re-derive AEK from mnemonic
-const { wrappedKey, salt } = await wrapKey(newPassphrase, aek, newSecretKey)
-// upload new wrappedKey to server
+import {
+    CircleClient, FetchCircleTransport, FetchSyncTransport, MemoryRecordStore,
+    SyncEngine, defineCollections, newRecordId,
+} from '@consealdev/conseal/sync';
+
+type Notes = { notes: { title: string } };
+
+const circle = new CircleClient({ transport: new FetchCircleTransport({ baseUrl: '/api/circle' }) });
+const { mnemonic } = await circle.setup(passphrase);   // show the mnemonic once, and never store it
+
+const sync = new SyncEngine<Notes>({
+    collections: defineCollections<Notes>({ notes: { id: '7f3a9c21', schemaVersion: 1 } }),
+    transport: new FetchSyncTransport({ baseUrl: '/api/sync' }),
+    store: new MemoryRecordStore(),   // the app's own RecordStore in production
+    keyring: circle,
+});
+
+await sync.save('notes', newRecordId(), { title: 'groceries' });
+await sync.sync();
 ```
 
-Four functions cover the full device-registration ceremony:
-
-| Function | Description |
-|---|---|
-| `initCircle(mnemonic, passphrase, secretKey)` | Founding device derives the shared AEK from the mnemonic, wraps it, and returns `wrappedAEK`, `aekCommitment`, and `deviceId`. |
-| `createJoinRequest(aekCommitment, deviceMeta?)` | New device generates an ephemeral ECDH key pair, after taking the circle's commitment from the backend. Returns the join request payload, the ephemeral private key (memory-only), and a `verificationCode` to display to the user. |
-| `authorizeJoin(joinRequest, wrappedAEK, passphrase, secretKey, serverReceivedAt)` | Trusted device unwraps its AEK and seals it for the new device via ECDH. `serverReceivedAt` is when the server received the request, in Unix ms; requests older than 5 minutes are rejected. |
-| `finalizeJoin(sealedAEK, ephemeralPrivateKey, passphrase, secretKey, aekCommitment)` | New device unseals the AEK, verifies it against the commitment the request was created with, and re-wraps it under its own credentials. Throws on commitment mismatch. |
-| `deriveVerificationCode(ephemeralPublicKey, aekCommitment)` | Derives an 80-bit code from the commitment and a public key, as 16 base32 characters: `7KQ2-M9XD-4RTF-B8NW`. The trusted device passes its own commitment, never one the server supplies. Both devices must show matching codes before approval: a key or a commitment substituted on the way changes one of them. |
-
-### Shared encrypted spaces (Channel)
-
-A channel has its own random key, the channel AEK. Each member holds it wrapped under their circle AEK, so every device in a member's circle opens it, including devices that join the circle later. An invite runs the circle's join ceremony between two users, with a verification code that also covers the channel id and its AEK commitment. See [the channel guide](https://conseal.dev/usage/channel.md).
-
-| Function | Description |
-|---|---|
-| `createChannel(circleAEK)` | Generates the channel AEK and wraps it under the creator's circle AEK. Returns `channelId`, `channelAEK`, `wrappedChannelAEK` and `aekCommitment`. |
-| `unwrapChannelAEK(channelId, wrappedChannelAEK, circleAEK)` | Opens a member's copy on any of their devices. Throws if it was wrapped for another channel or under another circle AEK. |
-| `createChannelJoinRequest(channelId, aekCommitment)` | Invitee generates an ephemeral ECDH key pair, after taking the channel's commitment. Returns the request, the ephemeral private key (memory-only), and a `verificationCode` to display. |
-| `deriveChannelVerificationCode(joinRequest, wrappedChannelAEK, circleAEK)` | Member derives the code for a request, from the channel AEK they hold. Both users must confirm the codes match. |
-| `authorizeChannelJoin(joinRequest, wrappedChannelAEK, circleAEK, serverReceivedAt)` | Member seals the channel AEK for the invitee via ECDH. Rejects requests older than 5 minutes. |
-| `finalizeChannelJoin(sealedAEK, ephemeralPrivateKey, circleAEK, channelId, aekCommitment)` | Invitee unseals the channel AEK, verifies the commitment, and wraps it under their circle AEK. Throws on commitment mismatch. |
-
-### Device initialisation
-
-| Function | Description |
-|---|---|
-| `init(wrappedKey, salt, passphrase, secretKey?)` | Unwraps the AEK and stores it in IndexedDB under `AEK_KEY_ID`. Load it with `loadCryptoKey(AEK_KEY_ID)`. |
-| `AEK_KEY_ID` | The IndexedDB key id for the AEK (`'aek'`). |
-
-### Mnemonic recovery (BIP-39)
-
-| Function | Description |
-|---|---|
-| `generateMnemonic()` | Generates a 24-word recovery phrase (256 bits of entropy). |
-| `recoverWithMnemonic(mnemonic, extractable?)` | Derives the AEK from the mnemonic (HKDF-SHA-256). Pass `extractable: true` to wrap it with `wrapKey`. |
-
-### Key serialisation (JWK)
-
-| Function | Description |
-|---|---|
-| `exportPublicKeyAsJwk(key)` | Exports a public CryptoKey to JWK. |
-| `importPublicKeyFromJwk(jwk, algorithm)` | Imports a JWK as a CryptoKey (`'ECDH'` or `'ECDSA'`). |
-
-### IndexedDB key storage
+A new device asks to join, and a device that is already in the circle approves it. Each shows a verification code, and the
+user approves only when the two match:
 
 ```ts
-import { saveCryptoKey, loadCryptoKey, deleteCryptoKey } from '@consealdev/conseal'
+const session = await newDevice.startJoin({ name: 'Laptop' });   // show session.verificationCode
+
+const [join] = await trustedDevice.pendingJoins();               // show join.verificationCode
+await trustedDevice.approveJoin(join, passphrase, true);         // only once the user confirms the codes match
+
+await session.check();                                           // poll until the state is 'authorized'
+await session.finish(passphrase);                                // the new device is in the circle and unlocked
 ```
 
-| Function | Description |
-|---|---|
-| `saveCryptoKey(name, key)` | Persists a CryptoKey to IndexedDB. |
-| `loadCryptoKey(name)` | Loads a CryptoKey. Returns `null` if not found. |
-| `deleteCryptoKey(name)` | Deletes a CryptoKey. |
+## The circle's screens
 
-### Utilities
+```ts
+import '@consealdev/conseal/ui';   // registers the elements
 
-| Function | Description |
-|---|---|
-| `toBase64(buf)` / `fromBase64(b64)` | Standard base64 encoding/decoding. |
-| `toBase64Url(buf)` / `fromBase64Url(b64)` | URL-safe base64 (no padding). |
-| `digest(data)` | SHA-256 hash. |
-
-## Design
-
-- **Zero runtime secrets on the server.** All encryption and decryption happens in the browser. The server stores only wrapped keys and ciphertext.
-- **SubtleCrypto everywhere.** No OpenSSL, no polyfills, no WASM. One runtime dependency: [`@scure/bip39`](https://github.com/paulmillr/scure-bip39), for mnemonics and their wordlist.
-- **Non-extractable keys.** Keys stored in IndexedDB have `extractable: false` — JavaScript cannot read the raw bytes, only use them for encrypt/decrypt.
-- **PBKDF2 at 600,000 iterations.** Passphrase-derived keys use SHA-256 with a 128-bit random salt per wrap. Intentionally slow to resist offline brute-force.
-
-## Requirements
-
-- Browser with [SubtleCrypto](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto) support (all modern browsers)
-- Node.js >= 20 (for testing / SSR with `globalThis.crypto`)
-
-## Security
-
-The [threat model](https://github.com/consealdev/conseal/blob/main/threat-model.md) says what conseal protects, what it relies on, and what a dishonest server can still do. Report a vulnerability privately, as the [security policy](https://github.com/consealdev/.github/blob/main/SECURITY.md) says, never in a public issue.
-
-## Development
-
-```bash
-npm install
-npm test           # unit tests (Vitest in Node, with fake-indexeddb)
-npm run typecheck
-npm run lint
-npm run build      # build to dist/
+html`
+    <conseal-setup
+        app-name="My app"
+        .circle=${circle}
+        @setup-done=${(event: CustomEvent) => showPhrase(event.detail.mnemonic)}
+    ></conseal-setup>
+`;
 ```
 
-### Cross-browser tests
+`<conseal-setup>`, `<conseal-phrase>`, `<conseal-unlock>`, `<conseal-join>`, `<conseal-approve-join>` and
+`<conseal-devices>` call only `CircleClient`, and fire a DOM event when a step is done: `setup-done`, `phrase-confirmed`,
+`unlock-done`, `join-done`, `approve-done` or `device-revoked`. The app decides which screen comes next.
 
-SubtleCrypto behaviour is not identical across engines. The browser suite runs the core's tests and the ceremony screens' tests in real Chromium, Firefox, and WebKit engines via Playwright.
+## Docs
 
-First-time setup — download browser binaries (~300 MB, one-off):
+[conseal.dev/docs](https://conseal.dev/docs/) has every call of the crypto core with its signature, the sync pages, each
+element, and the [threat model](https://conseal.dev/docs/security/threat-model/), which says what Conseal protects, against
+whom, and what it relies on.
 
-```bash
-npx playwright install chromium firefox webkit
-```
+---
 
-Then run:
-
-```bash
-npm run test:browser
-```
-
-WebKit is the highest-value target: every browser on iOS uses WebKit under the hood regardless of brand, so this provides real Safari/iOS coverage without a device.
-
-Both suites run automatically on CI for every push and pull request to `main`.
-
-## Issues
-
-Report bugs and request features at [github.com/consealdev/conseal/issues](https://github.com/consealdev/conseal/issues), the one tracker for conseal-js, conseal-dotnet and the spec. Pull requests are not accepted.
-
-## License
-
-Dual-licensed under [AGPL-3.0](LICENSE) and a [commercial license](COMMERCIAL-LICENSE.md).
+Licensed under the GNU Affero General Public License v3.0 or the Conseal Commercial License. See
+[LICENSE](https://github.com/consealdev/conseal-js/blob/main/LICENSE) and
+[COMMERCIAL-LICENSE.md](https://github.com/consealdev/conseal-js/blob/main/COMMERCIAL-LICENSE.md) for full terms.
