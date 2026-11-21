@@ -27,10 +27,14 @@ describe('<conseal-setup>', () => {
         await press(element, 'Create passphrase');
         const { detail } = (await done) as CustomEvent<SetupDoneDetail>;
 
-        expect(detail.mnemonic.split(' ')).to.have.length(24);
+        const words = detail.mnemonic.split(' ');
+        expect(words).to.have.length(24);
         expect(server.commitment).to.equal(detail.aekCommitment);
         expect(await circle.status()).to.equal('unlocked');
-        expect(textOf(element)).not.to.include(detail.mnemonic.split(' ')[0]);
+        // The phrase is shown by <conseal-phrase>, never here. A few of its words can still be words of this screen's own
+        // text, such as "only", so a screen that shows the phrase is one that has most of its 24 words, not one that has any
+        const screenWords = new Set(textOf(element).toLowerCase().split(/[^a-z]+/));
+        expect(words.filter(word => screenWords.has(word)).length).to.be.below(words.length / 2);
     });
 
     for (const [why, passphrase, confirmation] of [
